@@ -2,7 +2,8 @@ Simple Set of Traffic Generators.
 UDP, TCP and ICMP.
 
 Partially developed during the INGA and MMA projects at Blekinge Institute of Technology. 
-
+Patrik.Arlos@bth.se
+Vamsi.Krishna.Konkalla@bth.se
 
 Build:
 	make

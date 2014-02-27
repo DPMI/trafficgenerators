@@ -25,6 +25,24 @@ int timeout;
 int timeout_value;
 SAMPLE sample_iptr,sample_ipgr,sample_ipts,sample_ipgs;
 
+
+
+/*
+struct pduinfo{
+  char* exp_id;
+  u_int32_t seq_no;
+  u_int64_t send_start;
+  u_int64_t send_stop;
+  u_int64_t recv_start;
+  u_int64_t recv_stop;
+  u_int32_t length; //size of pdu!
+  u_int64_t ipts;
+  u_int64_t ipgs;
+  //u_int64_t iptr;
+  //u_int64_t ipgr;
+};
+*/
+
 struct pdudata{
   u_int32_t seq_no;
   u_int64_t send_start;
@@ -36,14 +54,19 @@ struct pdudata{
 //  u_int32_t length;
 };
 
+void Sample(int sig);
+void output_file(u_int32_t, u_int32_t,struct pdudata[],int, double);
+//struct pduinfo recvpdu[MAX_PDU];
+struct pdudata logdat[MAX_PDU];
 int pducount=0;
+
 double byteCount,pktCount;
 double dT;
 
 itimerval diftime;
 
-timeval tidA,tidB,theTime;
-itimerval sampletime;
+timeval tidA,tidB,theTime; //used when sampling.
+itimerval sampletime; 
 
 timeval tid1,tid2,tidf,tid3;
 int  counter;
@@ -55,13 +78,15 @@ static inline u_int64_t realcc(void){
   return cc;
 }
 
+double estimateCPU(int samples, int sleeptime, char* fname);
 double samplefreq;
-void Sample(int sig);
 
 
 u_int64_t sumipts=0,sumipgs=0,sumiptr=0,sumipgr=0;  /*to keep the previous pkt recv cpu counter*/
 int pcounter,m,js=0,jr=0; /*previou pkt sequence number*/
 int cond;
+
+
 int main(int argc, char *argv[])
 {
   int option_index, op,reqFlag=0;
@@ -69,19 +94,16 @@ int main(int argc, char *argv[])
   exp_id=run_id=key_id=0;
 
   double CPU_before, CPU_after;
-  CPU_before=CPU_after=0;
   struct timeval GTOD_before, GTOD_after, PktArr;
   u_int64_t TSC_before,TSC_after;
-  double samplefreq=0;
-  byteCount=pktCount=0;
-  int hflag=0;
-  int idleCount=0;
-  
-  TSC_before=TSC_after=0;
+	double samplefreq=0;
+	byteCount=pktCount=0;
+	int hflag=0;
+	
   static struct option long_options[]={
-    {"experiment_id", optional_argument , 0,'e'},
-    {"run_id", optional_argument , 0,'r'},
-    {"key_id", optional_argument , 0,'k'},
+    {"experiment_id", required_argument , 0,'e'},
+    {"run_id", required_argument , 0,'r'},
+    {"key_id", required_argument , 0,'k'},
     {"port_no", required_argument, 0, 'p'},
     {"freq", required_argument, 0, 'f'},
     {0,0,0,0}
@@ -92,7 +114,13 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
     // LOCAL_SERVER_PORT=atoi(argv[1]);
   }
-
+  
+  for(int i=0;i<MAX_PDU;i++){
+    logdat[i].send_start=0;
+    logdat[i].send_stop=0;
+    logdat[i].recv_start=0;
+    logdat[i].recv_stop=0;
+  }
   dT=0;
   while ( (op =getopt_long(argc, argv, "f:k:e:r:p:h",long_options, &option_index))!=EOF) {
     switch (op){
@@ -112,40 +140,61 @@ int main(int argc, char *argv[])
       LOCAL_SERVER_PORT=atoi(optarg);
       break;
     case 'f':/*sampleFreq*/
-      samplefreq=atof(optarg);
+			samplefreq=atof(optarg);
       dT=1/(double)samplefreq;
       break;
-      
-    case 'h': /* Help */
-      printf("UDP server. v6\n");
-      printf("-e --experiment_id	Experiment id [required]\n");
-      printf("-r --run_id	 				Run id [required]\n");
-      printf("-k --key_id	 				Key id [required]\n");
-      printf("-p --port_no 				Port to listen on, default %d\n", LOCAL_SERVER_PORT);
-      printf("-f --freq    				Sample frequency, default 0 -- No sampling.\n");
-      printf("-h   help \n\n");
-      printf("Logs the data into a directory <experiment_id> that must exist, save the data as \n");
-      printf("<run_id>_server.txt\n");
-      printf("<run_id>_recv_cpueval.txt\n");
-      printf("The sender <run_id>_send_cpueva.txt must be collected from the sender after experiments completed.\n");
-      printf("\n");
-      hflag=1;
-      break;
+
+		case 'h': /* Help */
+			printf("UDP server. v6\n");
+			printf("-e --experiment_id	Experiment id [required]\n");
+			printf("-r --run_id	 				Run id [required]\n");
+			printf("-k --key_id	 				Key id [required]\n");
+  		printf("-p --port_no 				Port to listen on, default %d\n", LOCAL_SERVER_PORT);
+			printf("-f --freq    				Sample frequency, default 0 -- No sampling.\n");
+			printf("-h   help \n\n");
+			printf("Logs the data into a directory <experiment_id> that must exist, save the data as \n");
+			printf("<run_id>_server.txt\n");
+			printf("<run_id>_recv_cpueval.txt\n");
+			printf("The sender <run_id>_send_cpueva.txt must be collected from the sender after experiments completed.\n");
+			printf("\n");
+			hflag=1;
+			break;
     default:
-      hflag=1;
-      
+			hflag=1;
+
       printf("Error....\n");
       break;
     }
   }
-  
+
 	
 	if (hflag) exit(EXIT_SUCCESS);
 	if(reqFlag<3) {
 			printf("You are missing required info. %d \n", reqFlag);
 			exit(EXIT_FAILURE);
 	}
+  char fname_cpu[200];
+  bzero(&fname_cpu,200);
+  /*
+  strcat(fname_cpu, exp_id);
+  strcat(fname_cpu, "/");
+  strcat(fname_cpu, run_id);
+  strcat(fname_cpu, "_recv_cpueval.txt");
+  */
 
+  sprintf(fname_cpu,"%d_%d_recv_udpcpueval.txt",exp_id,run_id);
+
+  printf("Writes cpu data to %s.\n", fname_cpu);
+  
+  CPU_before=estimateCPU(40,100000,fname_cpu);
+  TSC_before=realcc();
+  gettimeofday(&GTOD_before,NULL);
+  printf("Estimated cpu to %f Hz.\n",CPU_before);
+
+
+
+  
+  
   u_int64_t rstart,rstop;/*rstart mean reciving start time*/
   int sd, rc, n, cliLen;
   struct sockaddr_in cliAddr, servAddr;
@@ -176,18 +225,17 @@ int main(int argc, char *argv[])
   /* server infinite loop */
   transfer_data *message; 
   counter=0;
-  tid1.tv_sec=60;
+  tid1.tv_sec=30;
   diftime.it_interval=tid1;
   diftime.it_value=tid1;
   counter=-1;
   
   //    setitimer(ITIMER_REAL,&diftime,NULL);
   
-
   struct tm *file_stime;
+  gettimeofday(&tidf,NULL);
   char file_name[20];
   file_name[19]='\0';
-  gettimeofday(&tidf,NULL);
   file_stime=localtime(&tidf.tv_sec);
   strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
   printf("File Started at %s\n", file_name);
@@ -197,42 +245,35 @@ int main(int argc, char *argv[])
   struct timeval accept_timeout;
   fd_set rset;
 
-  char filename[200];
-  bzero(&filename,200);
-  sprintf(filename,"udpserver.log");
-
   int selectReturn=0;
   
-  int Acounter=0;
-  int charErr=0;
-  
-  if(dT>=1){
-    tidA.tv_sec=int(dT);
-    tidB.tv_sec=int(dT);
-    tidA.tv_usec=int((dT-int(dT))*1000000);
-    tidB.tv_usec=tidA.tv_usec;
-  } else {
-    tidA.tv_sec=0;
-    tidB.tv_sec=0;
-    tidA.tv_usec=int(dT*1000000);
-    tidB.tv_usec=tidA.tv_usec;
-  }
-  
-  sampletime.it_interval=tid1;
-  sampletime.it_value=tid2;
-  
-  pktCount=0;
-  byteCount=0;
-  
-  FILE *pFile;
-  pFile=fopen(filename,"a+");
-  fprintf(pFile, "\n%s **Server Starting**\n",file_name);
-  fclose(pFile);
+  /*
+  char expidrunid[16];
+  strcpy(expidrunid,exp_id);
+  strcat(expidrunid,run_id);
+  */
+	int Acounter=0;
+	int charErr=0;
 
+	if(dT>=1){
+		tidA.tv_sec=int(dT);
+		tidB.tv_sec=int(dT);
+		tidA.tv_usec=int((dT-int(dT))*1000000);
+		tidB.tv_usec=tidA.tv_usec;
+		} else {
+		tidA.tv_sec=0;
+		tidB.tv_sec=0;
+		tidA.tv_usec=int(dT*1000000);
+		tidB.tv_usec=tidA.tv_usec;
+	}
+	
+	sampletime.it_interval=tid1;
+	sampletime.it_value=tid2;
 
-  accept_timeout.tv_sec=60;
-  accept_timeout.tv_usec=0;
-
+	pktCount=0;
+	byteCount=0;
+        int iii = 0;
+  
   while(cond==1){
     /* init buffer */
     memset(msg,0x0,MAX_MSG);
@@ -242,38 +283,25 @@ int main(int argc, char *argv[])
     
     FD_ZERO(&rset);
     FD_SET(sd, &rset);
-
+    accept_timeout.tv_sec=60;//230
+    accept_timeout.tv_usec=0;
     
     rstart=realcc();
     selectReturn=select(sd+1,&rset,NULL,NULL,&accept_timeout);
     if(selectReturn==-1){
       perror("Select Error:\n");
     } else if(selectReturn==0){
-      printf("!TIMEOUT!\nSocket was idle for %g seconds.\n", (double)accept_timeout.tv_sec);
+      printf("!TIMEOUT!\nSocket was idle for %d seconds.\n", (int)accept_timeout.tv_sec);
       FD_SET(sd,&rset);
-      accept_timeout.tv_sec=30;
+      accept_timeout.tv_sec=60;//230
       accept_timeout.tv_usec=0;
-      printf("Reinitializing for a new experiment, I've been idle for %ld seconds?\n", idleCount*accept_timeout.tv_sec);
-      printf("Last connection from : %s:%d \n", inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-      if(idleCount==0){
-	pFile=fopen(filename,"a+");
-	gettimeofday(&tidf,NULL);
-	file_stime=localtime(&tidf.tv_sec);
-	strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
-	fprintf(pFile, "%s  ",file_name);
-	fprintf(pFile, "%s %d Idle \n",inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-	fclose(pFile);
-      }
-      idleCount++;
+
+      output_file(exp_id,run_id, logdat,pducount, CPU_before);
       cond=0;
     } else {
-      accept_timeout.tv_sec=10;
-      accept_timeout.tv_usec=0;
       n = recvfrom(sd, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
-      idleCount=0;
       rstop=realcc();
       gettimeofday(&PktArr,NULL);
-
       if(n<0){
 	/*  printf("%s: cannot receive data \n",argv[0]); */
 	continue;
@@ -281,47 +309,38 @@ int main(int argc, char *argv[])
 	if(n<40){
 	  byteCount+=n;
 	  pktCount++;
-	  printf("[%g]: Got small packet, %g \n", pktCount,byteCount);
+         
+	  printf("[%d]: Got small packet, %d \n", (int)pktCount,(int)byteCount);
 	} else {
 	/* print received message */
 	message=(transfer_data*)msg;
 	byteCount+=n;
 	pktCount++;
+         iii++;
+        printf("recieved packet no. %d \n",iii);
 	/*
 	printf("NORD:%d:%d:%d\n",message->exp_id,message->run_id,message->key_id);
 	printf("HORD:%d:%d:%d\n",ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id));
 	*/
 	charErr=0;
-	//	printf("Payload is %d bytes.\n", n);
-	for(Acounter=0;Acounter<(int)(n-(sizeof(transfer_data)-1500));Acounter++){
+		printf("Payload is %d bytes.\n", n);
+	for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1500));Acounter++){
 		if(message->junk[Acounter]!='x'){
 				printf("Err: %c (%d) ", (message->junk[Acounter]),Acounter);
 				charErr++;
 			} else {
-//				printf("Received: %c ", (message->junk[Acounter]));
+				//printf("Received: %c ", (message->junk[Acounter]));
 			}
 		}	
 	if(charErr>0){
-	  printf("CharError is %d\n",charErr);
+		printf("CharError is %d\n",charErr);
 	}
 	if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
 	  printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
-	  printf("Perhaps a new experiment?\n");
-	  exp_id=ntohl(message->exp_id);
-	  run_id=ntohl(message->run_id);
-	  key_id=ntohl(message->key_id);
-	  printf("I adapt to these new values, ");
-	  printf("connected to: %s:%d \n", inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-	  pFile=fopen(filename,"a+");
-	  gettimeofday(&tidf,NULL);
-	  file_stime=localtime(&tidf.tv_sec);
-	  strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
-	  fprintf(pFile, "%s ",file_name);
-	  fprintf(pFile, "%s %d  Missmatch of exp/key/run \n",inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-	  fclose(pFile);
 	}
 
 	if( (counter==-1) ){
+
 		if(dT!=0){
 			gettimeofday(&theTime, NULL);
 			printf("Initializing the sampling every %g second.\n",dT);
@@ -330,34 +349,42 @@ int main(int argc, char *argv[])
 		} else {
 			printf("Sampling disabled.\n");
 		}
-		msgcounter=ntohl(message->counter); /* Init the counter */
-		printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
-		printf("Connected to: %s:%d \n", inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-		pFile=fopen(filename,"a+");
-		gettimeofday(&tidf,NULL);
-		file_stime=localtime(&tidf.tv_sec);
-		strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
-		fprintf(pFile, "%s ",file_name);
-		fprintf(pFile, "%s %d Initial message\n",inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port));
-		fclose(pFile);
-		if(msgcounter!=0) {
-		  printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
-		}
-	} else {
+	  msgcounter=ntohl(message->counter); /* Init the counter */
+	  printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	  if(msgcounter!=0) {
+	    printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
+	  }
+	} else {  //
 	  msgcounter++;
 	  if(msgcounter!=ntohl(message->counter)){
 	    if(ntohl(message->counter)==0) {
 	      /* Probably a new client. Make no fuss about it.*/
 	      msgcounter=ntohl(message->counter);	
 	    } else {
-	      printf("Packet missmatch, expected %d got %d, a loss of %d packets.\n",msgcounter, message->counter,message->counter-msgcounter);
+	      //	      printf("Packet missmatch, expected %d got %d, a loss of %d packets.\n",msgcounter, message->counter,message->counter-msgcounter);
 	      msgcounter=ntohl(message->counter);	
 	    }
 	  }
-	}
+	} //
 	
 	counter++;
+	int arrpos=ntohl(message->counter);
+	//Store the SEQnr of this PDU
+	logdat[arrpos].seq_no=arrpos;
+	// Store the sending time of the previous PDU
+	if((arrpos-1)>=0){
+	  logdat[arrpos-1].send_start=message->starttime;
+	  logdat[arrpos-1].send_stop=message->stoptime;
+	  logdat[arrpos-1].send_dept_time=message->depttime;
+	}
+	// Store the receive time of this PDU. 
+	logdat[arrpos].recv_start=rstart;
+	logdat[arrpos].recv_stop=rstop;
+	logdat[arrpos].recv_arrival_time=PktArr;
+
+	
 	pducount++;  	    	
+
 	//	printf("%d\t %llu\t %llu\n", message->counter, rstart, rstop);
 	rstart=0;
 	rstop=0;
@@ -367,14 +394,19 @@ int main(int argc, char *argv[])
 	}
       }
     }
-  }/* end of server infinite loop */
+  }/* end of server infinite loop--while */
   
-
+  gettimeofday(&GTOD_after,NULL);
+  TSC_after=realcc();
+  CPU_after=estimateCPU(40,100000,fname_cpu);
 
   printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
   printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
   printf("CPU before: %f \n", CPU_before);
   printf("CPU after: %f \n", CPU_after);
+  
+
+
   return 0;
   
 }
@@ -401,8 +433,8 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   printf(">output_file(%d,%d, %p, %d)\n",eid, rid, &rpdu, sz);
   int n,rc=0;
   u_int64_t iptr=0,ipts=0, ipgr=0,ipgs=0;
-  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
-  double var_iptr=0,var_ipts=0,var_ipgr=0,var_ipgs=0;
+  //  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
+  //double var_iptr=0,var_ipts=0,var_ipgr=0,var_ipgs=0;
   if(sz==0){
     printf("No data to save.\n");
     return;
@@ -416,7 +448,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   strcat(fname, filename);
   strcat(fname, "_server.txt");
   */
-  sprintf(fname,"%d/%d_server.txt",eid,rid);
+  sprintf(fname,"%d_x_%d_udpserver.txt",eid,rid);
   
 
   FILE *pFile;
@@ -430,27 +462,28 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   for(n=0;n<sz;n++){
     /*to find iptr,ipts,ipgr,ipgs using sample(start)*/
     if(n>0){
-      if( ((rpdu[n].send_stop!=0) & (rpdu[n-1].send_stop))!=0){
+      if( (rpdu[n].send_stop!=0) & (rpdu[n-1].send_stop!=0) ){
 	ipts=(rpdu[n].send_stop-rpdu[n-1].send_stop);
 	sample_ipts.PutSample((double)ipts);
       }
-      if( ( (rpdu[n].send_start!=0) & (rpdu[n-1].send_start))!=0 ){
+      if( (rpdu[n].send_start!=0) & (rpdu[n-1].send_start!=0) ){
 	ipgs=(rpdu[n].send_start-rpdu[n-1].send_stop);
 	sample_ipgs.PutSample((double)ipgs);
       }
-      if( ( (rpdu[n].recv_stop!=0) & (rpdu[n-1].recv_stop))!=0){
+      if( (rpdu[n].recv_stop!=0) & (rpdu[n-1].recv_stop!=0) ){
 	iptr=(rpdu[n].recv_stop-rpdu[n-1].recv_stop);
 	sample_iptr.PutSample((double)iptr);
 	rc++;
       }
-      if( ( (rpdu[n].recv_start!=0) & (rpdu[n-1].recv_start))!=0){
+      if( (rpdu[n].recv_start!=0) & (rpdu[n-1].recv_start!=0) ){
 	ipgr=(rpdu[n].recv_start-rpdu[n-1].recv_stop);
 	sample_ipgr.PutSample((double)ipgr);
       }
     }
   }
 
-  var_ipts=sample_ipts.GetSampleVar();
+  /*
+    var_ipts=sample_ipts.GetSampleVar();
   av_ipts=sample_ipts.GetSampleMean();
   var_iptr=sample_iptr.GetSampleVar();
   av_iptr=sample_iptr.GetSampleMean();
@@ -458,8 +491,9 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   av_ipgs=sample_ipgs.GetSampleMean();
   var_ipgr=sample_ipgr.GetSampleVar();
   av_ipgr=sample_ipgr.GetSampleMean();
+  */
 
-  fprintf(pFile, "Statitics Section\n");
+  fprintf(pFile, "UDPStatitics Section\n");
   fprintf(pFile, "Total number of PDU recieved %d\n",sz);
   fprintf(pFile,"param:mean:var;min;max\n");
   fprintf(pFile,"IPTS:%f:%f:%f:%f\n",sample_ipts.GetSampleMean(),sample_ipts.GetSampleVar(),sample_ipts.GetSampleMin(),sample_ipts.GetSampleMax());
@@ -470,7 +504,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
 \n");
 
 
-  fprintf(pFile, "Index\tSeqNo\tS.start\tS.stop\tR.start\tR.stop\tDeptTime\tArrTime\n");
+  fprintf(pFile, "Index\tSeqNo\tS.start\tS.stop\tR.start\tR.stop\t\tSender-DeptTime\t\t Receiver-ArrTime\n");
   for(n=0;n<sz;n++){
     fprintf(pFile, "%d\t%d\t%llu\t%llu\t%llu\t%llu\t%ld.%06ld\t%ld.%06ld\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start,rpdu[n].recv_stop,rpdu[n].send_dept_time.tv_sec,rpdu[n].send_dept_time.tv_usec,rpdu[n].recv_arrival_time.tv_sec,rpdu[n].recv_arrival_time.tv_usec);
     //    printf("%d\t %llu\t %llu\t %llu\t %llu\n", rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start, rpdu[n].recv_stop);
@@ -486,6 +520,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
 }
 
 double estimateCPU(int samples, int sleeptime, char *filename){
+
 
   struct tm *s;
   char tms[40];
@@ -540,6 +575,7 @@ double estimateCPU(int samples, int sleeptime, char *filename){
   fprintf(pFile,"***\n");
   fclose(pFile);
   return (freq_avg)/(double)(samples);
+
 }
 
 

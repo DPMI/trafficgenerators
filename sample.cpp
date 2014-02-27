@@ -92,6 +92,12 @@ double SAMPLE::GetSampleMin(void)
   return min;
 }
 
+int serv ()
+{
+cout <<"hello world\n";
+return 0;
+}
+
 
 
 

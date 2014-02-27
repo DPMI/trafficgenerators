@@ -10,20 +10,33 @@
 #include <sys/time.h> /* select() */
 #include <stdlib.h>
 #include <signal.h>
-#include <string.h>
+#include <string>
+#include <strings.h> //hhhhhhhhhhhhhhhhhhhh
+
 #include <iomanip>
 #include <getopt.h> /* Variable calling of main */
 #include <iostream>
 #include <math.h>
+#include <cstring>/// cggggggggg
 #include "udpgen.h"
+#define lent 8 // sizeof double
+#include "rndexp.h"
+#include "rndunif.h"
+#include "rnd.h"
+#include "rnddet.h"
+#include "rndunid.h"
+
+
+
 
 using namespace std;
 
 void uPause(double noUsec);
 void closePrg(int sig);
 void killPrg(int sig);
+void randexpo(double a[], int xxx);
 
-//double estimateCPU(int samples, int sleeptime, char* fname);
+double estimateCPU(int samples, int sleeptime, char* fname);
 
 static inline u_int64_t realcc(void){
  u_int64_t cc;
@@ -34,11 +47,16 @@ static inline u_int64_t realcc(void){
 struct timeval *s;
 struct timeval start,data,stop;
 double runPkts;
-int size,noBreak;
+int size,noBreak,size1;
 
 int main(int argc, char *argv[]) {
+//  double zzz[10000];// added today
+//  int vvv;//added today
+///   vvv = (sizeof(zzz)/lent);//***today
+//randexpo(zzz,vvv);//***
   int option_index,op,sd, rc, hflag, REMOTE_SERVER_PORT,reqFlag;
-  double waittime,linkCapacity,sleepTime;
+  double waittime,waittime1,sleepTime,sleepTime1;
+  //double linkCapacity;
   struct sockaddr_in cliAddr, remoteServAddr;
   struct sockaddr_in myAddr;
   struct hostent *h;
@@ -49,13 +67,16 @@ int main(int argc, char *argv[]) {
   double CPU_before, CPU_after;
   struct timeval GTOD_before, GTOD_after, PktDept;
   u_int64_t TSC_before,TSC_after;
-  CPU_before=CPU_after=0;
-  TSC_before=TSC_after=0;
+
  
   int runType; /* 0= default, forever, 1= nopkts, 2=time */
   noBreak=1;
-  linkCapacity=9600;
-  
+  //  linkCapacity=9600;
+  waittime1= 1000000;
+  char psd, wtd;  
+  psd='z';
+  wtd='z';
+
   static struct option long_options[] =  {
 	{"expid ",required_argument,0,'e'},
 	{"keyid ",required_argument,0,'r'},
@@ -63,12 +84,15 @@ int main(int argc, char *argv[]) {
 	{"server",required_argument, 0, 's'},
 	{"port", required_argument,0,'p'},
 	{"pkts", required_argument,0,'n'},
-	{"pktLen", required_argument, 0, 'l'},
-	{"waittime", required_argument, 0, 'w'},
+	{"pktdist", required_argument,0,'m'},	
+	{"pktLenmin", required_argument, 0, 'l'},
+        {"pktLenMax", required_argument, 0, 'L'},
+	{"waitdist", required_argument, 0, 'v'},
+	{"waittimmin", required_argument, 0, 'w'},
+        {"waittimemax", required_argument, 0, 'W'},
 	{"help", required_argument, 0, 'h'},
 	{0, 0, 0, 0}
         };
-
   REMOTE_SERVER_PORT=1500;
 
   /* check command line args, so that we are atleast in the correct "area" */
@@ -82,9 +106,9 @@ int main(int argc, char *argv[]) {
   reqFlag=0;
   size=1224;
   sleepTime=-1;
-
+ size1=1224;
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:l:w:h",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:m:l:L:v:w:W:h",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e':/*exp_id*/
       exp_id=(u_int32_t)atoi(optarg);
@@ -110,22 +134,36 @@ int main(int argc, char *argv[]) {
       runType=1;
       break;
       break;
+    case 'm': /*pkt size distribution*/
+      psd=*optarg;
+      cout <<" PSD is"<<psd <<"\n" ;
+      break;
     case 'l': /*pkt length*/
       size=atoi(optarg);
+      cout<< "Min packet Size is "<<size <<"\n";
       break;
-
+case 'L': /*pkt length maxima*/
+      size1=atoi(optarg);
+      cout<< "Max packet Size is "<<size1 <<"\n";
+      break;
+    case 'v': /* distribution*/
+	wtd=*optarg;
+	break;
     case 'w': /*pkt length*/
       sleepTime=atoi(optarg);
       waittime=sleepTime;
       reqFlag=4;
       break;
-      
+   case 'W': /*wait time maxima*/
+      sleepTime1=atoi(optarg);
+       cout<<"sleeptime Max is "<<sleepTime<<"\n";
+      waittime1=sleepTime1;
+      reqFlag=4;
+      break;   
     case 'h': /*Help*/
       hflag=1;
       
       printf("%s\n",argv[0]);
-      printf(" (C)2003 Patrik.Carlsson@bth.se\n http://www.bth.se/its/staff/pca\n");
-      printf(" This tool was developed in the INGA project, based on funding from VINNOVA.\n\n");
       printf(" -h help (this text)\n");
       printf(" -e(--expid) Experiment id [required]\n");
       printf(" -r(--runid) Run id [required]\n");
@@ -134,7 +172,9 @@ int main(int argc, char *argv[]) {
       printf(" -p (--port) <Destination Port> [optional default = 1500] \n");
       printf(" -n (--pkts) <Number of packets to send> [optional default = forever]\n");
       printf(" -l (--pktLen) <Packet Length> [bytes] [optional default = 1224]\n\n");
+      printf(" -m (--pktsize distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
       printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
+      printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
       printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
       printf(" If neither is defined the software will run forever, or atleast until terminated. \n\n");
       break;
@@ -157,6 +197,56 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+
+  RND* myRND1;// packet size distribution
+  RND* myRND2; // wait time distribution
+  switch(psd){
+	case 'e':
+		printf("Expontial...");
+		myRND1=new RNDEXP(size1);
+	//	RNDEXP myRND1(size1);
+	break;
+	case 'u':
+		printf("Uniform...");
+		myRND1=new RNDUNIF(size,size1);
+		//RNDUNIF myRND1(size,size1);		
+	break;
+
+	case 'd':
+               printf ("uniform discrete");
+                myRND1 = new RNDUNID(size,size1);
+		//RNDUNID myRND1(size,size1);
+               break;
+	default:
+	printf("DEfault is to deterministic ");
+		myRND1=new RNDDET(size1);
+		//RNDDET myRND1(size1);
+	 	break;
+  }
+
+  switch(wtd){
+	case 'e':
+		printf("Expontial...");
+		myRND2=new RNDEXP(waittime1);
+	break;
+	case 'u':
+		printf("Uniform...");
+		myRND2=new RNDUNIF(waittime,waittime1);
+	break;
+
+	case 'd':
+         printf("uniform discrete");
+		myRND2=new RNDUNID(waittime,waittime1);
+          break;
+	default:
+	printf("DEfaults to determ");
+		myRND2=new RNDDET(waittime1);
+	 	break;
+  }
+ 
+(*myRND1).printseed();
+(*myRND2).printseed();
+
   char fname_cpu[200];
   bzero(&fname_cpu,200);
   /*
@@ -165,19 +255,18 @@ int main(int argc, char *argv[]) {
   strcat(fname_cpu, run_id);
   strcat(fname_cpu, "_send_cpueval.txt");
   */
-  sprintf(fname_cpu,"%d/%d_send_cpueval.txt", exp_id,run_id);
-  /*
+  sprintf(fname_cpu,"%d_%d_send_cpueval.txt", exp_id,run_id);
+
   printf("Writes cpu data to %s.\n", fname_cpu);
-  CPU_before=estimateCPU(40,100000,fname_cpu);
+  //CPU_before=estimateCPU(40,100000,fname_cpu);
   TSC_before=realcc();
   gettimeofday(&GTOD_before,NULL);
   printf("Estimated cpu to %f Hz.\n",CPU_before); 
-  */
+
 
   printf("%s\nSending data to %s:%s port %d)\n", argv[0], h->h_name,inet_ntoa(*(struct in_addr *)h->h_addr_list[0]),REMOTE_SERVER_PORT);
   remoteServAddr.sin_family = h->h_addrtype;
-  memcpy((char *) &remoteServAddr.sin_addr.s_addr,
-	 h->h_addr_list[0], h->h_length);
+  memcpy((char *) &remoteServAddr.sin_addr.s_addr, h->h_addr_list[0], h->h_length);
   remoteServAddr.sin_port = htons(REMOTE_SERVER_PORT);
 
   /* socket creation */
@@ -197,9 +286,9 @@ int main(int argc, char *argv[]) {
     printf("%s: cannot bind port\n", argv[0]);
     exit(1);
   }
-  
-  //  printf("Src port : %d \n", ntohs(cliAddr.sin_port));
-  
+
+	printf("Src port : %d \n", ntohs(cliAddr.sin_port));
+	
   socklen_t len;
   len=128;
   
@@ -213,11 +302,12 @@ int main(int argc, char *argv[]) {
     strcpy(sender.junk, test.c_str());
     psender=&sender;
     
-    u_int64_t istart,istop,istart0,istop0;/*Var used for send start-stop time*/
+    u_int64_t istart,istop;
+    //u_int64_t istart0,istop0;/*Var used for send start-stop time*/
     istart=0;
     istop=0;
-    istart0=0;
-    istop0=0;
+    //    istart0=0;
+    //istop0=0;
     
     /* send data */
     s=&data;
@@ -235,21 +325,24 @@ int main(int argc, char *argv[]) {
     sender.run_id=htonl(run_id);
     sender.key_id=htonl(key_id);
     
+    printf("Sending:\n");
     printf("Experiment id=%d, run id=%d and key id = %d\n", exp_id,run_id,key_id);
     /*
     printf("HORD:%d:%d:%d\n", exp_id,run_id,key_id);
     printf("NORD%d:%d:%d\n", sender.exp_id,sender.run_id,sender.key_id);
     */
-    PktDept.tv_sec=0;
-    PktDept.tv_usec=0;
+		PktDept.tv_sec=0;
+		PktDept.tv_usec=0;
 
     while(di<runPkts){
+	size=int(myRND1->Rnd());
+	//         cout<< size<<"\n";		
       sender.counter=htonl((int)di);
       sender.starttime=istart;
       sender.stoptime=istop;
-      sender.depttime=PktDept;
+			sender.depttime=PktDept;
       istart=realcc();
-      rc =sendto(sd, &sender,size, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));
+      rc =sendto(sd, &sender,size, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
       istop=realcc();
       gettimeofday(&PktDept,NULL); 
 
@@ -264,12 +357,25 @@ int main(int argc, char *argv[]) {
       if(int(di)%1000==0) {
 	cout << di << " pkts." <<endl;
       }
+      waittime=myRND2->Rnd();
+      //       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
       uPause(waittime);
     }
     gettimeofday(s,NULL);
     stop=*s;
     }
-    printf("Done\n");
+
+  gettimeofday(&GTOD_after,NULL);
+  TSC_after=realcc();
+  //  CPU_after=estimateCPU(40,100000,fname_cpu);
+
+  printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
+  printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
+  printf("CPU before: %f \n", CPU_before);
+  printf("CPU after: %f \n", CPU_after);
+
+
+
   return 1;
 }
 
@@ -286,6 +392,10 @@ void uPause(double noUsec){
  
   if(secs>0) {
   	secJump=1;
+	if(secs>1){
+	  printf("Sec %d s!!",secs); 
+	}
+
   }
   if(s.tv_usec+usecs>1000000) {
     e.tv_sec=e.tv_sec+1;
@@ -296,14 +406,29 @@ void uPause(double noUsec){
   }
   
   if(secJump==1) {
-   while(s.tv_sec<e.tv_sec){
+    while(s.tv_sec<e.tv_sec && loops<1000000 ){
        gettimeofday(&s,NULL);
        loops++;
    }
+    if(loops>=1000000){
+      printf("sec loops 100000.\n ");
+    }
   }
-  while(s.tv_usec<e.tv_usec){
+
+  loops=0;
+  while(s.tv_sec<=e.tv_sec && s.tv_usec<e.tv_usec && loops<1000000 ){
       gettimeofday(&s,NULL);
       loops++;
+  }
+  if(loops>=1000000){
+    printf("usec loops 100000.\n ");
+    printf("Current %d s target %d s \t ",(int)s.tv_sec,(int)e.tv_sec   );
+    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+  }
+  if(s.tv_sec>e.tv_sec){
+    printf("s sec > e sec.\n ");
+    printf("Current %d s target %d s \t ",(int)s.tv_sec,(int)e.tv_sec   );
+    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
   }
 
   gettimeofday(&s,NULL);
@@ -337,9 +462,14 @@ double estimateCPU(int samples, int sleeptime, char *filename){
   if(samples>100){
     samples=100;
   }
+printf ("helllo %s \n",filename);
   FILE *pFile;
-  pFile=fopen(filename,"a+");
-  fprintf(pFile, "Time\tCpu Cycles\tFrequency\n");
+pFile=fopen(filename,"w+");
+ if( (pFile=fopen(filename,"a+"))== NULL)
+printf("--------\n");
+//printf ("%d %d --- hellow orld \n", samples, sleeptime);
+
+ fprintf( pFile,"Time\tCpu Cycles\tFrequency\n");
   
 
   for(int i=0;i<samples;i++){
@@ -375,7 +505,8 @@ double estimateCPU(int samples, int sleeptime, char *filename){
   fprintf(pFile,"Average CPU = %f\n", (freq_avg)/(double)(samples));
   fprintf(pFile,"***\n");
   fclose(pFile);
-  return (freq_avg)/(double)(samples);
+  return (freq_avg)/(double)(samples); 
+
 }
 
 

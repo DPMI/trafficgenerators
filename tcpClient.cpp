@@ -1,6 +1,4 @@
-/* fpont 12/99 */
-/* pont.net    */
-/* tcpClient.c */
+
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,11 +10,18 @@
 #include <string.h> /* memset() */
 #include <stdlib.h>
 #include <sys/time.h> /* select() */
+#include <netinet/tcp.h>
 
 #include <getopt.h> /* Variable calling of main */
 #include <iostream>
 #include <time.h>
 #include <math.h>
+
+#include "rnd.h"
+#include "rndunif.h"
+#include "rndexp.h"
+#include "rnddet.h"
+#include "rndunid.h"
 
 
 #include "udpgen.h"
@@ -37,7 +42,7 @@ static inline u_int64_t realcc(void){
 struct timeval *s;
 struct timeval start,data,stop;
 double runPkts;
-int size,noBreak;
+int size,noBreak,size1;
 
 
 
@@ -49,7 +54,7 @@ int SERVER_PORT=1500;
 int main (int argc, char *argv[]) {
 
  int option_index,op,sd, rc, hflag, REMOTE_SERVER_PORT,reqFlag;
-  double waittime,linkCapacity,sleepTime;
+  double waittime,linkCapacity,sleepTime,waittime1, sleepTime1;
   struct sockaddr_in servAddr; //cliAddr, 
   struct sockaddr_in myAddr;
   struct hostent *h;
@@ -65,6 +70,11 @@ int main (int argc, char *argv[]) {
   int runType; /* 0= default, forever, 1= nopkts, 2=time */
   noBreak=1;
   linkCapacity=9600;
+  char psd;
+  char wtd;
+   psd ='x';
+   wtd ='x';
+
   
   static struct option long_options[] =  {
 	{"expid ",required_argument,0,'e'},
@@ -73,8 +83,12 @@ int main (int argc, char *argv[]) {
 	{"server",required_argument, 0, 's'},
 	{"port", required_argument,0,'p'},
 	{"pkts", required_argument,0,'n'},
-	{"pktLen", required_argument, 0, 'l'},
-	{"waittime", required_argument, 0, 'w'},
+        {"pktdist", required_argument,0,'m'},
+	{"pktLenmin", required_argument, 0, 'l'},
+        {"pktLenMax", required_argument, 0, 'L'},
+	{"waittimemin", required_argument, 0, 'w'},
+        {"waittimemax", required_argument, 0, 'W'},
+        {"waitdist", required_argument, 0, 'v'},
 	{"down", required_argument, 0, 'd'},
 	{"help", required_argument, 0, 'h'},
 	{0, 0, 0, 0}
@@ -92,10 +106,12 @@ int main (int argc, char *argv[]) {
   runType=0;
   reqFlag=0;
   size=1224;
+  size1 = 1224;
   sleepTime=-1;
+  waittime1 = 1000000;
 
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:l:w:dh",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:m:n:l:L:v:w:W:d:h",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e':/*exp_id*/
       exp_id=(u_int32_t)atoi(optarg);
@@ -117,20 +133,38 @@ int main (int argc, char *argv[]) {
       SERVER_PORT=atoi(optarg);
       break;
     case 'n': /* number of pkts */
-      runPkts=atof(optarg)+1;
+      runPkts=atof(optarg);
       runType=1;
       break;
+      break;
+    case 'm': /*pkt size distribution*/
+      psd=*optarg;
+      cout <<" PSD is"<<psd <<"\n" ;
       break;
     case 'l': /*pkt length*/
       size=atoi(optarg);
       break;
-	case 'd': /* download */
+     case 'L': /*pkt length maxima*/
+      size1=atoi(optarg);
+      cout<< "Max packet Size is "<<size1 <<"\n";
+      break;
+    case 'd': /* download */
 		direction=1;
 		break;
+    case 'v': /*waittime distribution*/
+	wtd=*optarg;
+	break;
+    
 		
-    case 'w': /*pkt length*/
+    case 'w': /*waittime*/
       sleepTime=atoi(optarg);
       waittime=sleepTime;
+      reqFlag=4;
+      break;
+    case 'W': /*wait time maxima*/
+      sleepTime1=atoi(optarg);
+       cout<<"sleeptime Max is "<<sleepTime<<"\n";
+      waittime1=sleepTime1;
       reqFlag=4;
       break;
       
@@ -148,7 +182,9 @@ int main (int argc, char *argv[]) {
       printf(" -p (--port) <Destination Port> [optional default = 1500] \n");
       printf(" -n (--pkts) <Number of packets to send> [optional default = forever]\n");
       printf(" -l (--pktLen) <Packet Length> [bytes] [optional default = 1224]\n\n");
+      printf(" -m (--pktsize distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
       printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
+      printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
 	  printf(" -d (--down) 	Download, do not upload.\n");
 	  
       printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
@@ -165,6 +201,51 @@ int main (int argc, char *argv[]) {
     printf("Missing required arguments.\nRun %s -h for arguments.\n",argv[0]);
     exit(EXIT_FAILURE);
   }
+
+  RND* myRND1;// packet size distribution
+  RND* myRND2; // wait time distribution
+  switch(psd){
+	case 'e':
+		printf("Expontial...");
+		myRND1=new RNDEXP(size1);
+	break;
+	case 'u':
+		printf("Uniform...");
+		myRND1=new RNDUNIF(size,size1);
+	break;
+
+	case 'd':
+               printf ("uniform discrete");
+                myRND1 = new RNDUNID(size,size1);
+               break;
+	default:
+	printf("DEfault is to deterministic ");
+		myRND1=new RNDDET(size1);
+	 	break;
+  }
+
+  switch(wtd){
+	case 'e':
+		printf("Expontial...");
+		myRND2=new RNDEXP(waittime1);
+	break;
+	case 'u':
+		printf("Uniform...");
+		myRND2=new RNDUNIF(waittime,waittime1);
+	break;
+
+	case 'd':
+         printf("uniform discrete");
+		myRND2=new RNDUNID(waittime,waittime1);
+          break;
+	default:
+	printf("DEfaults to determ");
+		myRND2=new RNDDET(waittime1);
+	 	break;
+  }
+(*myRND1).printseed();
+(*myRND2).printseed();
+
 
   /* get server IP address (no check if input is IP address or DNS name */
   h = gethostbyname(serverName);
@@ -207,13 +288,22 @@ int main (int argc, char *argv[]) {
     exit(1);
  }
 
-	
+  int flag=1;
+  int resultTCP=setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
+  if(resultTCP<0){ 
+    perror("problem.");
+  }
+
+    
+  
+
+
  
-	transfer_data sender;
-//    transfer_data *psender;
+    transfer_data sender;
+    char* psender=(char*)&sender;
     u_int64_t istart,istop;//,istart0,istop0;/*Var used for send start-stop time*/
 
-	 string test(1499,'x');
+    string test(1499,'x');
     strcpy(sender.junk, test.c_str());
 	
 //----------------
@@ -234,14 +324,29 @@ int main (int argc, char *argv[]) {
 		PktDept.tv_usec=0;
 
     while(di<runPkts){
+     size=int(myRND1->Rnd());
+     //    cout<< size<<"\n";
+    waittime = (int) (myRND2->Rnd());
+//cout<<waittime<<" wait time\n";
+//waittime = waittime*1000;
+		
+      
       sender.counter=htonl((int)di);
       sender.starttime=istart;
-      sender.stoptime=istop;
+      sender.stoptime=
+
+
+
+
+
+istop;
       sender.depttime=PktDept;
       istart=realcc();
+
       rc =write(sd, &sender,size);
       istop=realcc();
       gettimeofday(&PktDept,NULL); 
+      //cout<<PktDept.tv_sec<<"."<<PktDept.tv_usec <<"\n";
 
       if(rc<0)          {
 	printf("%s: cannot send data, Packet N#  %d,  size was %d bytes, sender %p \n",argv[0],(int)(di-1), size,&sender );
@@ -280,26 +385,48 @@ void uPause(double noUsec){
  
   if(secs>0) {
   	secJump=1;
+	if(secs>1){
+	  printf("Sec %d s!!",secs); 
+	}
+
   }
   if(s.tv_usec+usecs>1000000) {
     e.tv_sec=e.tv_sec+1;
-    e.tv_usec=s.tv_usec+(suseconds_t)usecs-1000000;
+    e.tv_usec=s.tv_usec+(long int)usecs-1000000;
     secJump=1;
   } else {
-    e.tv_usec=s.tv_usec+(suseconds_t)usecs;
+    e.tv_usec=s.tv_usec+(long int)usecs;
   }
   
   if(secJump==1) {
-   while(s.tv_sec<e.tv_sec){
+    while(s.tv_sec<e.tv_sec && loops<1000000 ){
        gettimeofday(&s,NULL);
        loops++;
    }
+    if(loops>=1000000){
+      printf("sec loops 100000.\n ");
+    }
   }
-  while(s.tv_usec<e.tv_usec){
+
+  loops=0;
+  while(s.tv_sec<=e.tv_sec && s.tv_usec<e.tv_usec && loops<1000000 ){
       gettimeofday(&s,NULL);
       loops++;
+  }
+  if(loops>=1000000){
+    printf("usec loops 100000.\n ");
+    printf("Current %d s target %d s \t ",s.tv_sec,e.tv_sec   );
+    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+  }
+  if(s.tv_sec>e.tv_sec){
+    printf("s sec > e sec.\n ");
+    printf("Current %d s target %d s \t ",s.tv_sec,e.tv_sec   );
+    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
   }
 
   gettimeofday(&s,NULL);
 //  printf("<uPause(%g)\n", noUsec);
 }
+
+
+

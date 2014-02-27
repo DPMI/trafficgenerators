@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
        uint16_t ICMP_IDnr=1;
        uint16_t ICMP_seq=0;
       int icmplen=64;
-      int k=0;
+
         char *hostname;
         char *sip;
         struct hostent *host;
@@ -222,12 +222,12 @@ int main(int argc, char *argv[])
         icmp = (struct icmphdr *) (packet + sizeof(struct iphdr));
         strcpy(packet+sizeof(struct iphdr)+sizeof(struct icmphdr),data);
 
-        printf("\nsending ICMP packets from %s ..\n\n",sip);
+//        printf("\nsending ICMP packets to %s...\n\n",argv[2]);
 
         ip->ihl = 5;
         ip->version = 4;
         ip->tos = 0;
-        ip->tot_len = sizeof(struct iphdr) + sizeof(struct icmphdr) + icmplen + 1;
+        ip->tot_len = sizeof(struct iphdr) + sizeof(struct icmphdr) + icmplen + 1; // icmplen is constant = 64
         ip->id = htons(getuid());
         ip->ttl = 255;
         ip->protocol = IPPROTO_ICMP;
@@ -258,19 +258,19 @@ int main(int argc, char *argv[])
         addr.sin_port = htons(31337);
         addr.sin_addr.s_addr = inet_addr(hostname);
 
-        printf("starting...\n");
+//        printf("starting...\n");
 
 	  gettimeofday(&before,NULL);
         for(i=0;i<num;i++)
         {
 	  //fprintf(stdout,"PING...");
-	  printf("[%d/%d],%d.%06ld : %d bytes : ", i, num,(int)before.tv_sec, before.tv_usec, ip->tot_len );
+	  printf("%d.%06ld : %d bytes : ", (int)before.tv_sec, before.tv_usec, ip->tot_len );
 	  if((sendto(sock,packet,ip->tot_len,0,(struct sockaddr *)&addr,sizeof(struct sockaddr))) < ip->tot_len)
 	  {
 		printerr("couldn't send the packet");
-	  } else {
-	    sent++;
 	  }
+	  else sent++;
+
 	  struct timeval tv;
 	  tv.tv_usec = 0;
 	  tv.tv_sec = timeout;
@@ -290,12 +290,12 @@ int main(int argc, char *argv[])
 		{
 		  gettimeofday(&after,NULL);
 		  addr2.s_addr = ip->daddr;
-		  printf("received ICMP packet from %s ",inet_ntoa(addr2));
+//		  printf("received ICMP packet from %s\n",inet_ntoa(addr2));
 		  struct timeval elapsed;
-		  k=timeval_subtract(&elapsed,&after,&before);
+		  i=timeval_subtract(&elapsed,&after,&before);
 		    
-		  printf("%d.%06ld : %d bytes : ", (int)before.tv_sec, before.tv_usec, ip->tot_len );
-		  printf("Stop:%d.%06ld ", (int)after.tv_sec, after.tv_usec);
+//		  printf("%d.%06ld : %d bytes : ", (int)before.tv_sec, before.tv_usec, ip->tot_len );
+	  //	printf("Stop:%d.%06ld \n", (int)after.tv_sec, after.tv_usec);
 		  printf(" %d.%06ld s\n", (int)elapsed.tv_sec, elapsed.tv_usec);	
 
 		  recvd++;
@@ -303,13 +303,12 @@ int main(int argc, char *argv[])
 		if(n == -1)
 		printerr("recv() failed");
 	  }
-	  else{
+	  else
 	      printf("-1 \n");
-	      printerr("didn't receive answer. host seems down");
-	  }
+//	      printerr("didn't receive answer. host seems down");
         }
-       printf("\n-------- stats --------\n");
-       printf("%d packets transmitted, %d received\n...and the rest is silence\n",sent,recvd);
+ //       printf("\n-------- stats --------\n");
+ //       printf("%d packets transmitted, %d received\n...and the rest is silence\n",sent,recvd);
         return 0;
 }
 /**** EOF ****/
