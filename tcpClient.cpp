@@ -1,5 +1,3 @@
-
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -41,9 +39,9 @@ static inline u_int64_t realcc(void){
 
 struct timeval *s;
 struct timeval start,data,stop;
-double runPkts;
+double runPkts,runPkts_1;
 int size,noBreak,size1;
-
+int difference_size,sample_length;
 
 
 #define MAX_MSG 65536
@@ -53,8 +51,8 @@ int SERVER_PORT=1500;
 
 int main (int argc, char *argv[]) {
 
- int option_index,op,sd, rc, hflag, REMOTE_SERVER_PORT,reqFlag;
-  double waittime,linkCapacity,sleepTime,waittime1, sleepTime1;
+  int option_index,op,sd, rc, hflag, reqFlag;
+  double waittime,sleepTime,waittime1, sleepTime1;
   struct sockaddr_in servAddr; //cliAddr, 
   struct sockaddr_in myAddr;
   struct hostent *h;
@@ -66,35 +64,35 @@ int main (int argc, char *argv[]) {
   struct timeval PktDept; //GTOD_before, GTOD_after, 
 //  u_int64_t TSC_before,TSC_after;
 
-	int direction=0;
+  int direction=0;
   int runType; /* 0= default, forever, 1= nopkts, 2=time */
   noBreak=1;
-  linkCapacity=9600;
+  waittime1= 1000000;
   char psd;
   char wtd;
-   psd ='x';
-   wtd ='x';
-
+  psd ='x';
+  wtd ='x';
   
   static struct option long_options[] =  {
-	{"expid ",required_argument,0,'e'},
-	{"keyid ",required_argument,0,'r'},
-	{"runid ",required_argument,0,'k'},
-	{"server",required_argument, 0, 's'},
-	{"port", required_argument,0,'p'},
-	{"pkts", required_argument,0,'n'},
-        {"pktdist", required_argument,0,'m'},
-	{"pktLenmin", required_argument, 0, 'l'},
-        {"pktLenMax", required_argument, 0, 'L'},
-	{"waittimemin", required_argument, 0, 'w'},
-        {"waittimemax", required_argument, 0, 'W'},
-        {"waitdist", required_argument, 0, 'v'},
-	{"down", required_argument, 0, 'd'},
-	{"help", required_argument, 0, 'h'},
-	{0, 0, 0, 0}
-        };
-
-  REMOTE_SERVER_PORT=1500;
+    {"expid ",required_argument,0,'e'},
+    {"keyid ",required_argument,0,'r'},
+    {"runid ",required_argument,0,'k'},
+    {"server",required_argument, 0, 's'},
+    {"port", required_argument,0,'p'},
+    {"pkts", required_argument,0,'n'},
+    {"pktdist", required_argument,0,'m'},
+    {"pktLenmin", required_argument, 0, 'l'},
+    {"pktLenMax", required_argument, 0, 'L'},
+    {"waittimemin", required_argument, 0, 'w'},
+    {"waittimemax", required_argument, 0, 'W'},
+    {"waitdist", required_argument, 0, 'v'},
+    {"samplelength", required_argument, 0, 'z'},
+    {"down", required_argument, 0, 'd'},
+    {"help", required_argument, 0, 'h'},
+    {0, 0, 0, 0}
+  };
+  
+  
 
   /* check command line args, so that we are atleast in the correct "area" */
   if(argc<1){
@@ -111,7 +109,7 @@ int main (int argc, char *argv[]) {
   waittime1 = 1000000;
 
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:m:n:l:L:v:w:W:d:h",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:m:n:l:L:v:w:W:z:d:h",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e':/*exp_id*/
       exp_id=(u_int32_t)atoi(optarg);
@@ -149,8 +147,8 @@ int main (int argc, char *argv[]) {
       cout<< "Max packet Size is "<<size1 <<"\n";
       break;
     case 'd': /* download */
-		direction=1;
-		break;
+      direction=1;
+      break;
     case 'v': /*waittime distribution*/
 	wtd=*optarg;
 	break;
@@ -167,6 +165,10 @@ int main (int argc, char *argv[]) {
       waittime1=sleepTime1;
       reqFlag=4;
       break;
+	case 'z': /*sample_length*/
+      sample_length=atoi(optarg);
+       cout<<"sample_length is "<<sample_length<<"\n";
+      break;   
       
     case 'h': /*Help*/
       hflag=1;
@@ -186,7 +188,7 @@ int main (int argc, char *argv[]) {
       printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
       printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
 	  printf(" -d (--down) 	Download, do not upload.\n");
-	  
+	  printf(" -z  Enter the sample length (integer)\n");    
       printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
       printf(" If neither is defined the software will run forever, or atleast until terminated. \n\n");
       break;
@@ -307,7 +309,10 @@ int main (int argc, char *argv[]) {
     strcpy(sender.junk, test.c_str());
 	
 //----------------
+difference_size = size1 -size;
+  runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
    printf("will run %g pkts.\n",runPkts);
+  cout <<" Experiment will run an overall of " << runPkts_1 <<"samples";
     double di=0;
 
     sender.exp_id=htonl(exp_id);
@@ -320,11 +325,13 @@ int main (int argc, char *argv[]) {
     printf("HORD:%d:%d:%d\n", exp_id,run_id,key_id);
     printf("NORD%d:%d:%d\n", sender.exp_id,sender.run_id,sender.key_id);
     */
-		PktDept.tv_sec=0;
-		PktDept.tv_usec=0;
+    PktDept.tv_sec=0;
+    PktDept.tv_usec=0;
+    istart=0;
+    istop=0;
 
-    while(di<runPkts){
-     size=int(myRND1->Rnd());
+    while(di<runPkts_1){
+    // size=int(myRND1->Rnd());
      //    cout<< size<<"\n";
     waittime = (int) (myRND2->Rnd());
 //cout<<waittime<<" wait time\n";
@@ -333,20 +340,14 @@ int main (int argc, char *argv[]) {
       
       sender.counter=htonl((int)di);
       sender.starttime=istart;
-      sender.stoptime=
-
-
-
-
-
-istop;
+      sender.stoptime= istop;
       sender.depttime=PktDept;
       istart=realcc();
 
       rc =write(sd, &sender,size);
       istop=realcc();
       gettimeofday(&PktDept,NULL); 
-      //cout<<PktDept.tv_sec<<"."<<PktDept.tv_usec <<"\n";
+     // cout<<PktDept.tv_sec<<"."<<PktDept.tv_usec <<"\n";
 
       if(rc<0)          {
 	printf("%s: cannot send data, Packet N#  %d,  size was %d bytes, sender %p \n",argv[0],(int)(di-1), size,&sender );
@@ -355,7 +356,11 @@ istop;
       }
       //	printf("%d\t %llu\t %llu\n", sender.counter, istart,istop);
       di++;
-      
+      if (int (di) %(int)runPkts == 0)
+	{
+	size = size + sample_length;
+	//sleep(1);
+	}
       if(int(di)%1000==0) {
 	cout << di << " pkts." <<endl;
       }
@@ -415,12 +420,12 @@ void uPause(double noUsec){
   }
   if(loops>=1000000){
     printf("usec loops 100000.\n ");
-    printf("Current %d s target %d s \t ",s.tv_sec,e.tv_sec   );
+    printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
     printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
   }
   if(s.tv_sec>e.tv_sec){
     printf("s sec > e sec.\n ");
-    printf("Current %d s target %d s \t ",s.tv_sec,e.tv_sec   );
+    printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
     printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
   }
 

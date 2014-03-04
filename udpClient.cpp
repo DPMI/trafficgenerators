@@ -297,7 +297,7 @@ case 'L': /*pkt length maxima*/
     exit(1);
   }
 
-	printf("Src port : %d \n", ntohs(cliAddr.sin_port));
+  printf("Src port : %d \n", ntohs(cliAddr.sin_port));
 	
   socklen_t len;
   len=128;
@@ -305,34 +305,34 @@ case 'L': /*pkt length maxima*/
 
   rc=getsockname(sd, (struct sockaddr* ) &myAddr, &len);
 
-    transfer_data sender;
-    //transfer_data *psender;
-
-    string test(1499,'x');
-    strcpy(sender.junk, test.c_str());
-    //    psender=&sender;
-    
-    u_int64_t istart,istop;
-    //    u_int64_t istart0,istop0;/*Var used for send start-stop time*/
-    istart=0;
-    istop=0;
-    //istart0=0;
-    //istop0=0;
-    
-    /* send data */
-    s=&data;
-    gettimeofday(s,NULL);
-    
-    //    cout<<s->tv_sec<<","<<s->tv_usec<<endl;
-    start=*s;
-    
+  transfer_data sender;
+  //transfer_data *psender;
+  
+  string test(1499,'x');
+  strcpy(sender.junk, test.c_str());
+  //    psender=&sender;
+  
+  u_int64_t istart,istop;
+  //    u_int64_t istart0,istop0;/*Var used for send start-stop time*/
+  istart=0;
+  istop=0;
+  //istart0=0;
+  //istop0=0;
+  
+  /* send data */
+  s=&data;
+  gettimeofday(s,NULL);
+  
+  //    cout<<s->tv_sec<<","<<s->tv_usec<<endl;
+  start=*s;
+  
   // ((L-l)*num of samples )/sample_length
-//sample_length = 2;
-difference_size = size1 -size;
+  //sample_length = 2;
+  difference_size = size1 -size;
   runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
-    if(runType==1) {
+  if(runType==1) {
     printf("will run %g pkts for each size.\n",runPkts);
-	cout <<" Experiment will run an overall of " << runPkts_1 <<"samples";
+    cout <<" Experiment will run an overall of " << runPkts_1 <<"samples";
     double di=0;
     
     sender.exp_id=htonl(exp_id);
@@ -345,8 +345,8 @@ difference_size = size1 -size;
     printf("HORD:%d:%d:%d\n", exp_id,run_id,key_id);
     printf("NORD%d:%d:%d\n", sender.exp_id,sender.run_id,sender.key_id);
     */
-		PktDept.tv_sec=0;
-		PktDept.tv_usec=0;
+    PktDept.tv_sec=0;
+    PktDept.tv_usec=0;
 
     while(di<runPkts_1){
 	//size=int(myRND1->Rnd());

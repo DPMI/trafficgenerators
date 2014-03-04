@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
 	if(n<40){
 	  byteCount+=n;
 	  pktCount++;
-	  printf("[%d]: Got small packet, %d \n", pktCount,byteCount);
+	  printf("[%d]: Got small packet, %d \n", (int)pktCount,(int)byteCount);
 	} else {
 	/* print received message */
 	message=(transfer_data*)msg;
@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
 		printf("CharError is %d\n",charErr);
 	}
 	if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
-	  printf("Missmatch of exp/run/key_id %lu:%lu:%lu expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	  printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
 	}
 
 	if( (counter==-1) ){
@@ -341,7 +341,7 @@ int main(int argc, char *argv[])
 			printf("Sampling disabled.\n");
 		}
 	  msgcounter=ntohl(message->counter); /* Init the counter */
-	  printf("Initial message;%lu:%lu:%lu;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	  printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
 	  if(msgcounter!=0) {
 	    printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
 	  }
@@ -424,8 +424,8 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   printf(">output_file(%d,%d, %p, %d)\n",eid, rid, &rpdu, sz);
   int n,rc=0;
   u_int64_t iptr=0,ipts=0, ipgr=0,ipgs=0;
-  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
-  double var_iptr=0,var_ipts=0,var_ipgr=0,var_ipgs=0;
+  //  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
+  //double var_iptr=0,var_ipts=0,var_ipgr=0,var_ipgs=0;
   if(sz==0){
     printf("No data to save.\n");
     return;
@@ -453,27 +453,27 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   for(n=0;n<sz;n++){
     /*to find iptr,ipts,ipgr,ipgs using sample(start)*/
     if(n>0){
-      if(rpdu[n].send_stop!=0 & rpdu[n-1].send_stop!=0){
+      if( (rpdu[n].send_stop!=0) & (rpdu[n-1].send_stop!=0) ){
 	ipts=(rpdu[n].send_stop-rpdu[n-1].send_stop);
 	sample_ipts.PutSample((double)ipts);
       }
-      if(rpdu[n].send_start!=0 & rpdu[n-1].send_start!=0 ){
+      if( (rpdu[n].send_start!=0) & (rpdu[n-1].send_start!=0) ){
 	ipgs=(rpdu[n].send_start-rpdu[n-1].send_stop);
 	sample_ipgs.PutSample((double)ipgs);
       }
-      if(rpdu[n].recv_stop!=0 & rpdu[n-1].recv_stop!=0){
+      if( (rpdu[n].recv_stop!=0) & (rpdu[n-1].recv_stop!=0) ){
 	iptr=(rpdu[n].recv_stop-rpdu[n-1].recv_stop);
 	sample_iptr.PutSample((double)iptr);
 	rc++;
       }
-      if(rpdu[n].recv_start!=0 & rpdu[n-1].recv_start!=0){
+      if( (rpdu[n].recv_start!=0) & (rpdu[n-1].recv_start!=0) ){
 	ipgr=(rpdu[n].recv_start-rpdu[n-1].recv_stop);
 	sample_ipgr.PutSample((double)ipgr);
       }
     }
   }
 
-  var_ipts=sample_ipts.GetSampleVar();
+  /*  var_ipts=sample_ipts.GetSampleVar();
   av_ipts=sample_ipts.GetSampleMean();
   var_iptr=sample_iptr.GetSampleVar();
   av_iptr=sample_iptr.GetSampleMean();
@@ -481,6 +481,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   av_ipgs=sample_ipgs.GetSampleMean();
   var_ipgr=sample_ipgr.GetSampleVar();
   av_ipgr=sample_ipgr.GetSampleMean();
+  */
 
   fprintf(pFile, "Statitics Section\n");
   fprintf(pFile, "Total number of PDU recieved %d\n",sz);
