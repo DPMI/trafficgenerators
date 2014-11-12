@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <ctime>
@@ -20,6 +21,7 @@
 #include "sample.h"
 
 int LOCAL_SERVER_PORT= 1500;
+int SERVER_TIMEOUT=10;
 void alarmHandler(int signo);
 int timeout;
 int timeout_value;
@@ -66,9 +68,9 @@ double dT;
 itimerval diftime;
 
 timeval tidA,tidB,theTime;
-itimerval sampletime;
+itimerval sampletime,sampletimeOff;
 
-timeval tid1,tid2,tidf,tid3;
+timeval tid1,tid2,tidf,tid3,tidOff;
 int  counter;
 u_int32_t msgcounter;
 
@@ -80,7 +82,8 @@ static inline u_int64_t realcc(void){
 
 double estimateCPU(int samples, int sleeptime, char* fname);
 double samplefreq;
-
+int runAsDaemon;
+char *logpath;
 
 u_int64_t sumipts=0,sumipgs=0,sumiptr=0,sumipgr=0;  /*to keep the previous pkt recv cpu counter*/
 int pcounter,m,js=0,jr=0; /*previou pkt sequence number*/
@@ -90,20 +93,29 @@ int main(int argc, char *argv[])
   int option_index, op,reqFlag=0;
   u_int32_t exp_id,run_id,key_id;
   exp_id=run_id=key_id=0;
+  runAsDaemon=0;
+  logpath=".";
 
   double CPU_before, CPU_after;
   struct timeval GTOD_before, GTOD_after, PktArr;
   u_int64_t TSC_before,TSC_after;
-	double samplefreq=0;
-	byteCount=pktCount=0;
-	int hflag=0;
-	
+  double samplefreq=0;
+  byteCount=pktCount=0;
+  int hflag=0;
+  int wildcard=1;
+  int loglevel=0;
+
   static struct option long_options[]={
     {"experiment_id", required_argument , 0,'e'},
     {"run_id", required_argument , 0,'r'},
     {"key_id", required_argument , 0,'k'},
     {"port_no", required_argument, 0, 'p'},
     {"freq", required_argument, 0, 'f'},
+    {"log", required_argument, 0, 'L'},
+    {"logpath", required_argument, 0, 'l'},
+    {"timeout", required_argument, 0, 't'},
+    {"wildcard", no_argument, 0, 'w'},    
+    {"daemon", no_argument, 0, 'd'},    
     {0,0,0,0}
     
   };
@@ -120,58 +132,101 @@ int main(int argc, char *argv[])
     logdat[i].recv_stop=0;
   }
   dT=0;
-  while ( (op =getopt_long(argc, argv, "f:k:e:r:p:h",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "t:f:k:e:r:p:hdL:l:w",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e': /* experiment_id */
       exp_id=(u_int32_t)atoi(optarg);
       reqFlag++;
+      wildcard=0;
       break;
     case 'r': /* experiment_id */
       run_id=(u_int32_t)atoi(optarg);
       reqFlag++;
+      wildcard=0;
       break;
     case 'k': /* experiment_id */
       key_id=(u_int32_t)atoi(optarg);
       reqFlag++;
+      wildcard=0;
       break;
     case 'p':/*port*/
       LOCAL_SERVER_PORT=atoi(optarg);
       break;
     case 'f':/*sampleFreq*/
-			samplefreq=atof(optarg);
+      samplefreq=atof(optarg);
       dT=1/(double)samplefreq;
       break;
+    case 'w': 
+      wildcard=1;
+      break;
+    case 'd':
+      runAsDaemon=1;
+      wildcard=1;
+      break;
+    case 't':
+      SERVER_TIMEOUT=atoi(optarg);
+      break;
+      
+   case 'L':/*Log Level*/
+      loglevel=atoi(optarg);
+      if(loglevel<0){
+	loglevel=0;
+      }
+      if(loglevel>3){
+	loglevel=3;
+      }
+      break;
+      
+    case 'l': /* Log Path */
+      logpath=strdup(optarg);
+      break;
 
-		case 'h': /* Help */
-			printf("UDP server. v6\n");
-			printf("-e --experiment_id	Experiment id [required]\n");
-			printf("-r --run_id	 				Run id [required]\n");
-			printf("-k --key_id	 				Key id [required]\n");
-  		printf("-p --port_no 				Port to listen on, default %d\n", LOCAL_SERVER_PORT);
-			printf("-f --freq    				Sample frequency, default 0 -- No sampling.\n");
-			printf("-h   help \n\n");
-			printf("Logs the data into a directory <experiment_id> that must exist, save the data as \n");
-			printf("<run_id>_server.txt\n");
-			printf("<run_id>_recv_cpueval.txt\n");
-			printf("The sender <run_id>_send_cpueva.txt must be collected from the sender after experiments completed.\n");
-			printf("\n");
-			hflag=1;
-			break;
+    case 'h': /* Help */
+      printf("UDP server. v6\n");
+      printf("-d || --daemon                    If enabled; the server will continue to serve new experiments. \n");
+      printf("                                  Timeout is %d s, and -w is set.\n",SERVER_TIMEOUT);
+      printf("-t || --timeout                   Timeout value [optional]\n");
+      printf("-w || --wildcard                  If used, it will NOT accept the first packet recieve \n");
+      printf("                                  and use the data found in it as expid,runid, keyid. \n");
+      printf("-p || --port_no 	     <port>	Port to listen on, default %d\n", LOCAL_SERVER_PORT);
+
+      printf("-e || --experiment_id  <id>       Experiment id [optional]\n");
+      printf("-r || --run_id	     <runid>	Run id [optional]\n");
+      printf("-k || --key_id	     <keyid>	Key id [optional]\n");
+
+      printf("-f || --freq    	     <freq>	Sample frequency, default 0 -- No sampling.\n");
+      printf("                                  Print status messages periodically.\n");
+
+      printf("-h   help \n");
+      printf("-L  --log              <level>    Logs recived data and CPU info to file\n");
+      printf("                                  Logs the data into a directory <experiment_id> that must\n");
+      printf("                                  exist, save the data as \n");
+      printf("                                  <run_id>_server.txt\n");
+      printf("                                  <run_id>_recv_cpueval.txt\n");
+      printf("                                  The sender <run_id>_send_cpueva.txt must be collected \n");
+      printf("                                  from the sender after experiments completed.\n");
+      printf("                                  1-- , 2-- , 3-- complete .\n");
+      printf("-l || --logpath <path>            Complete path where to store log, otherwise its logged where executed. \n");
+      printf("\n");
+      printf("MAX PDUs; %d MAX MSG length %d bytes .\n",MAX_PDU,MAX_MSG);
+      hflag=1;
+      break;
     default:
-			hflag=1;
-
+      hflag=1;
       printf("Error....\n");
       break;
     }
   }
 
-	
-	if (hflag) exit(EXIT_SUCCESS);
-	if(reqFlag<3) {
-			printf("You are missing required info. %d \n", reqFlag);
-			exit(EXIT_FAILURE);
-	}
+
+  if (hflag) exit(EXIT_SUCCESS);
+  if( (wildcard==0) && (reqFlag<3) ) {
+    printf("You are missing required info. %d \n", reqFlag);
+    exit(EXIT_FAILURE);
+  }
   char fname_cpu[200];
+  char fpath[200];
+  int mkdir_status;
   bzero(&fname_cpu,200);
   /*
   strcat(fname_cpu, exp_id);
@@ -180,16 +235,37 @@ int main(int argc, char *argv[])
   strcat(fname_cpu, "_recv_cpueval.txt");
   */
 
-  sprintf(fname_cpu,"%d/%d_recv_cpueval.txt",exp_id,run_id);
+  printf("MAX PDUs; %d MAX MSG length %d bytes .\n",MAX_PDU,MAX_MSG);
+  if(runAsDaemon){
+    printf("[Daemon] ");
+  }
+  printf("[%s]  ",logpath);
 
-  printf("Writes cpu data to %s.\n", fname_cpu);
+  if(wildcard){
+    printf("[Wildcard] ");
+  } else {
+    printf("[Expid=%d, Runid=%d, Keyid=%d] ",exp_id,run_id,key_id);
+  }
+
+  printf("[level= %d] \n",loglevel);
   
-  CPU_before=estimateCPU(40,100000,fname_cpu);
+  sprintf(fname_cpu,"%s/%d/recv_cpueval-%d-%d-%d.txt",logpath,exp_id,exp_id,run_id,key_id);
+  sprintf(fpath,"%s/%d",logpath,exp_id);
+  if(loglevel>1){
+    printf("Writes cpu data to %s.\n", fname_cpu);
+  }
+  if(wildcard==0 && loglevel>1){ // This is the ONLY case when its applicable, we know the exp,run and key id.
+    mkdir_status=mkdir(fpath,S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    printf("Result of mkdir %d, for mkdir(%s).\n",mkdir_status,fpath);
+    CPU_before=estimateCPU(40,10000,fname_cpu);
+  } else {
+    CPU_before=estimateCPU(40,10000,0);
+  }
   TSC_before=realcc();
   gettimeofday(&GTOD_before,NULL);
+  
   printf("Estimated cpu to %f Hz.\n",CPU_before);
-  
-  
+  printf("Sampling interval %f s.\n",dT);
   u_int64_t rstart,rstop;/*rstart mean reciving start time*/
   int sd, rc, n, cliLen;
   struct sockaddr_in cliAddr, servAddr;
@@ -203,7 +279,7 @@ int main(int argc, char *argv[])
   
   /* bind local server port */
   servAddr.sin_family = AF_INET;
-  servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  servAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   servAddr.sin_port = htons(LOCAL_SERVER_PORT);
   timeout=0;
   timeout_value=2;
@@ -234,7 +310,8 @@ int main(int argc, char *argv[])
   file_stime=localtime(&tidf.tv_sec);
   strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
   printf("File Started at %s\n", file_name);
-  printf("Exp id is %d run id is %d \n",exp_id,run_id);
+
+
   m=0; /*for pduinfo array*/
   int cond=1;
   struct timeval accept_timeout;
@@ -247,26 +324,35 @@ int main(int argc, char *argv[])
   strcpy(expidrunid,exp_id);
   strcat(expidrunid,run_id);
   */
-	int Acounter=0;
-	int charErr=0;
+  int Acounter=0;
+  int charErr=0;
+  
+  if(dT>=1){
+    tidA.tv_sec=int(dT);
+    tidB.tv_sec=int(dT);
+    tidA.tv_usec=int((dT-int(dT))*1000000);
+    tidB.tv_usec=tidA.tv_usec;
+  } else {
+    tidA.tv_sec=0;
+    tidB.tv_sec=0;
+    tidA.tv_usec=int(dT*1000000);
+    tidB.tv_usec=tidA.tv_usec;
+  }
+  
+  tidOff.tv_sec=0;
+  tidOff.tv_usec=0;
 
-	if(dT>=1){
-		tidA.tv_sec=int(dT);
-		tidB.tv_sec=int(dT);
-		tidA.tv_usec=int((dT-int(dT))*1000000);
-		tidB.tv_usec=tidA.tv_usec;
-		} else {
-		tidA.tv_sec=0;
-		tidB.tv_sec=0;
-		tidA.tv_usec=int(dT*1000000);
-		tidB.tv_usec=tidA.tv_usec;
-	}
-	
-	sampletime.it_interval=tid1;
-	sampletime.it_value=tid2;
+  sampletime.it_interval=tid1;
+  sampletime.it_value=tid2;
 
-	pktCount=0;
-	byteCount=0;
+  sampletimeOff.it_interval=tidOff;
+  sampletimeOff.it_value=tidOff;
+  
+  pktCount=0;
+  byteCount=0;
+
+
+
   
   while(cond==1){
     /* init buffer */
@@ -277,7 +363,7 @@ int main(int argc, char *argv[])
     
     FD_ZERO(&rset);
     FD_SET(sd, &rset);
-    accept_timeout.tv_sec=30;
+    accept_timeout.tv_sec=SERVER_TIMEOUT;
     accept_timeout.tv_usec=0;
     
     rstart=realcc();
@@ -285,13 +371,47 @@ int main(int argc, char *argv[])
     if(selectReturn==-1){
       perror("Select Error:\n");
     } else if(selectReturn==0){
-      printf("!TIMEOUT!\nSocket was idle for %d seconds.\n", (int)accept_timeout.tv_sec);
+      printf("!TIMEOUT!\nSocket was idle for %d seconds.\n", SERVER_TIMEOUT);//(int)accept_timeout.tv_sec);
       FD_SET(sd,&rset);
-      accept_timeout.tv_sec=30;
+      accept_timeout.tv_sec=SERVER_TIMEOUT;
       accept_timeout.tv_usec=0;
+      if(loglevel>0 && pktCount>0){
+	printf("Writing to file\n");
+	sprintf(fpath,"%s/%d",logpath,exp_id);
+	mkdir_status=mkdir(fpath,S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+	printf("Result of mkdir %d, for mkdir(%s).\n",mkdir_status,fpath);
+	output_file(exp_id,run_id, logdat,pducount, CPU_before);
+      }
+      if(runAsDaemon){
+	printf("Running as Daemon.\n");
+	/*Clean up */
+	 pktCount=0;
+	 byteCount=0;
+	 pducount=0;
+	 for(int i=0;i<MAX_PDU;i++){
+	   logdat[i].send_start=0;
+	   logdat[i].send_stop=0;
+	   logdat[i].recv_start=0;
+	   logdat[i].recv_stop=0;
+	 }
+	 counter=-1;
+	 
+	 if(dT!=0){
+	   gettimeofday(&theTime, NULL);
+	   printf("Initializing the sampling every %g second.\n",dT);
+	   signal(SIGALRM, Sample);
+	   setitimer(ITIMER_REAL,&sampletimeOff,NULL); //used for termination with SIGALRM
+	    } else {
+	   printf("Sampling disabled.\n");
+	 }
+	 
+	 
 
-      output_file(exp_id,run_id, logdat,pducount, CPU_before);
-      cond=0;
+	cond=1;
+      }else {
+	printf("One hit wonder.\n");
+	cond=0;
+      }
     } else {
       n = recvfrom(sd, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
       rstop=realcc();
@@ -305,97 +425,104 @@ int main(int argc, char *argv[])
 	  pktCount++;
 	  printf("[%d]: Got small packet, %d \n", (int)pktCount,(int)byteCount);
 	} else {
-	/* print received message */
-	message=(transfer_data*)msg;
-	byteCount+=n;
-	pktCount++;
-	/*
-	printf("NORD:%d:%d:%d\n",message->exp_id,message->run_id,message->key_id);
-	printf("HORD:%d:%d:%d\n",ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id));
-	*/
-	charErr=0;
-	//	printf("Payload is %d bytes.\n", n);
-	for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1500));Acounter++){
-		if(message->junk[Acounter]!='x'){
-				printf("Err: %c (%d) ", (message->junk[Acounter]),Acounter);
-				charErr++;
-			} else {
-//				printf("Received: %c ", (message->junk[Acounter]));
-			}
-		}	
-	if(charErr>0){
-		printf("CharError is %d\n",charErr);
-	}
-	if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
-	  printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
-	}
-
-	if( (counter==-1) ){
-
-		if(dT!=0){
-			gettimeofday(&theTime, NULL);
-			printf("Initializing the sampling every %g second.\n",dT);
-	 		signal(SIGALRM, Sample);
-	 		setitimer(ITIMER_REAL,&sampletime,NULL); //used for termination with SIGALRM
-		} else {
-			printf("Sampling disabled.\n");
-		}
-	  msgcounter=ntohl(message->counter); /* Init the counter */
-	  printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
-	  if(msgcounter!=0) {
-	    printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
+	  /* print received message */
+	  message=(transfer_data*)msg;
+	  byteCount+=n;
+	  pktCount++;
+	  
+	  if(loglevel>2){
+	  printf("NORD:%d:%d:%d\n",message->exp_id,message->run_id,message->key_id);
+	  printf("HORD:%d:%d:%d\n",ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id));
 	  }
-	} else {
-	  msgcounter++;
-	  if(msgcounter!=ntohl(message->counter)){
-	    if(ntohl(message->counter)==0) {
-	      /* Probably a new client. Make no fuss about it.*/
-	      msgcounter=ntohl(message->counter);	
+	  charErr=0;
+	  //	printf("Payload is %d bytes.\n", n);
+	  for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1500));Acounter++){
+	    if(message->junk[Acounter]!='x'){
+	      printf("Err: %c (%d) ", (message->junk[Acounter]),Acounter);
+	      charErr++;
 	    } else {
-	      //	      printf("Packet missmatch, expected %d got %d, a loss of %d packets.\n",msgcounter, message->counter,message->counter-msgcounter);
-	      msgcounter=ntohl(message->counter);	
+	      //				printf("Received: %c ", (message->junk[Acounter]));
+	    }
+	  }	
+	  if(charErr>0){
+	    printf("CharError is %d\n",charErr);
+	  }
+	  if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
+	    printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	    
+	  }
+	  
+	  if( (counter==-1) ){
+	    if(dT!=0){
+	      gettimeofday(&theTime, NULL);
+	      printf("Initializing the sampling every %g second.\n",dT);
+	      signal(SIGALRM, Sample);
+	      setitimer(ITIMER_REAL,&sampletime,NULL); //used for termination with SIGALRM
+	    } else {
+	      printf("Sampling disabled.\n");
+	    }
+	    msgcounter=ntohl(message->counter); /* Init the counter */
+	    if(wildcard==1){
+	      exp_id=ntohl(message->exp_id);
+	      run_id=ntohl(message->run_id);
+	      key_id=ntohl(message->key_id);
+	    }
+	    printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	    if(msgcounter!=0) {
+	      printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
+	    }
+	  } else {
+	    msgcounter++;
+	    if(msgcounter!=ntohl(message->counter)){
+	      if(ntohl(message->counter)==0) {
+		/* Probably a new client. Make no fuss about it.*/
+		msgcounter=ntohl(message->counter);	
+	      } else {
+		//	      printf("Packet missmatch, expected %d got %d, a loss of %d packets.\n",msgcounter, message->counter,message->counter-msgcounter);
+		msgcounter=ntohl(message->counter);	
+	      }
 	    }
 	  }
-	}
-	
-	counter++;
-	int arrpos=ntohl(message->counter);
-	//Store the SEQnr of this PDU
-	logdat[arrpos].seq_no=arrpos;
-	// Store the sending time of the previous PDU
-	if((arrpos-1)>=0){
-	  logdat[arrpos-1].send_start=message->starttime;
-	  logdat[arrpos-1].send_stop=message->stoptime;
-	  logdat[arrpos-1].send_dept_time=message->depttime;
-	}
-	// Store the receive time of this PDU. 
-	logdat[arrpos].recv_start=rstart;
-	logdat[arrpos].recv_stop=rstop;
-	logdat[arrpos].recv_arrival_time=PktArr;
-
-	
-	pducount++;  	    	
-
-	//	printf("%d\t %llu\t %llu\n", message->counter, rstart, rstop);
-	rstart=0;
-	rstop=0;
-	if(counter%10000==0 && counter!=0) {
-	  //	  printf("%s: from %s:UDP:%u  COUNTER= %d \n",argv[0],inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port), message->counter);
-	}
+	  
+	  counter++;
+	  int arrpos=ntohl(message->counter);
+	  //Store the SEQnr of this PDU
+	  logdat[arrpos].seq_no=arrpos;
+	  // Store the sending time of the previous PDU
+	  if((arrpos-1)>=0){
+	    logdat[arrpos-1].send_start=message->starttime;
+	    logdat[arrpos-1].send_stop=message->stoptime;
+	    logdat[arrpos-1].send_dept_time=message->depttime;
+	  }
+	  // Store the receive time of this PDU. 
+	  logdat[arrpos].recv_start=rstart;
+	  logdat[arrpos].recv_stop=rstop;
+	  logdat[arrpos].recv_arrival_time=PktArr;
+	  
+	  
+	  pducount++;  	    	
+	  
+	  //	printf("%d\t %llu\t %llu\n", message->counter, rstart, rstop);
+	  rstart=0;
+	  rstop=0;
+	  if(counter%10000==0 && counter!=0) {
+	    //	  printf("%s: from %s:UDP:%u  COUNTER= %d \n",argv[0],inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port), message->counter);
+	  }
 	}
       }
     }
   }/* end of server infinite loop */
   
-  gettimeofday(&GTOD_after,NULL);
-  TSC_after=realcc();
-  CPU_after=estimateCPU(40,100000,fname_cpu);
-
-  printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
-  printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
-  printf("CPU before: %f \n", CPU_before);
-  printf("CPU after: %f \n", CPU_after);
-  
+  if(loglevel>1){  
+    gettimeofday(&GTOD_after,NULL);
+    TSC_after=realcc();
+    CPU_after=estimateCPU(40,100000,fname_cpu);
+    
+    printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
+    printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
+    printf("CPU before: %f \n", CPU_before);
+    printf("CPU after: %f \n", CPU_after);
+  }
 
 
   return 0;
@@ -439,7 +566,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   strcat(fname, filename);
   strcat(fname, "_server.txt");
   */
-  sprintf(fname,"%d/%d_server.txt",eid,rid);
+  sprintf(fname,"%d/udpserver-%d-%d.txt",eid,eid,rid);
   
 
   FILE *pFile;
@@ -525,10 +652,12 @@ double estimateCPU(int samples, int sleeptime, char *filename){
   if(samples>100){
     samples=100;
   }
-  FILE *pFile;
-  pFile=fopen(filename,"a+");
-  fprintf(pFile, "Time\tCpu Cycles\tFrequency\n");
-  printf("Opened file.\n");
+  FILE *pFile=0;
+  if(filename!=NULL) {
+    pFile=fopen(filename,"a+");
+    fprintf(pFile, "Time\tCpu Cycles\tFrequency\n");
+    printf("Opened file.\n");
+  }
 
   for(int i=0;i<samples;i++){
     gettimeofday(&data,NULL);
@@ -558,11 +687,15 @@ double estimateCPU(int samples, int sleeptime, char *filename){
       freq=0;
       freq_avg=0;
     }
-    fprintf(pFile, "%s.%06ld\t%llu\t%f\n",tms, st[n].tv_usec,cputime[n],freq);
+    if(pFile!=NULL){
+      fprintf(pFile, "%s.%06ld\t%llu\t%f\n",tms, st[n].tv_usec,cputime[n],freq);
+    }
   }
-  fprintf(pFile,"Average CPU = %f\n", (freq_avg)/(double)(samples));
-  fprintf(pFile,"***\n");
-  fclose(pFile);
+  if(pFile!=NULL){
+    fprintf(pFile,"Average CPU = %f\n", (freq_avg)/(double)(samples));
+    fprintf(pFile,"***\n");
+    fclose(pFile);
+  }
   return (freq_avg)/(double)(samples);
 }
 

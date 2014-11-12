@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
   double CPU_before, CPU_after;
   struct timeval GTOD_before, GTOD_after, PktDept;
   u_int64_t TSC_before,TSC_after;
-
+  int loglevel=3;
  
   int runType; /* 0= default, forever, 1= nopkts, 2=time */
   noBreak=1;
@@ -164,11 +164,11 @@ case 'L': /*pkt length maxima*/
       waittime1=sleepTime1;
       reqFlag=4;
       break;   
-	case 'z': /*sample_length*/
+    case 'z': /*sample_length*/
       sample_length=atoi(optarg);
-       cout<<"sample_length is "<<sample_length<<"\n";
+      cout<<"sample_length is "<<sample_length<<"\n";
       break;   
-   
+      
     case 'h': /*Help*/
       hflag=1;
       
@@ -184,8 +184,8 @@ case 'L': /*pkt length maxima*/
       printf(" -m (--pktsize distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
       printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
       printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
-	printf(" -z  Enter the sample length (integer)\n");      
-	printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
+      printf(" -z  Enter the sample length (integer)\n");      
+      printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
       printf(" If neither is defined the software will run forever, or atleast until terminated. \n\n");
       break;
     default:
@@ -266,13 +266,13 @@ case 'L': /*pkt length maxima*/
   strcat(fname_cpu, "_send_cpueval.txt");
   */
   sprintf(fname_cpu,"%d_%d_send_cpueval.txt", exp_id,run_id);
-
-  printf("Writes cpu data to %s.\n", fname_cpu);
-  //CPU_before=estimateCPU(40,100000,fname_cpu);
-  TSC_before=realcc();
-  gettimeofday(&GTOD_before,NULL);
-  printf("Estimated cpu to %f Hz.\n",CPU_before); 
-
+  if(loglevel>1){
+    printf("Writes cpu data to %s.\n", fname_cpu);
+    //CPU_before=estimateCPU(40,100000,fname_cpu);
+    TSC_before=realcc();
+    gettimeofday(&GTOD_before,NULL);
+    printf("Estimated cpu to %f Hz.\n",CPU_before); 
+  }
 
   printf("%s\nSending data to %s:%s port %d)\n", argv[0], h->h_name,inet_ntoa(*(struct in_addr *)h->h_addr_list[0]),REMOTE_SERVER_PORT);
   remoteServAddr.sin_family = h->h_addrtype;
@@ -296,9 +296,8 @@ case 'L': /*pkt length maxima*/
     printf("%s: cannot bind port\n", argv[0]);
     exit(1);
   }
-
   printf("Src port : %d \n", ntohs(cliAddr.sin_port));
-	
+  
   socklen_t len;
   len=128;
   
@@ -328,11 +327,13 @@ case 'L': /*pkt length maxima*/
   
   // ((L-l)*num of samples )/sample_length
   //sample_length = 2;
+  printf("Size1 %d, size = %d \n", size1,size);
   difference_size = size1 -size;
   runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
   if(runType==1) {
     printf("will run %g pkts for each size.\n",runPkts);
-    cout <<" Experiment will run an overall of " << runPkts_1 <<"samples";
+    printf("Experiment will run an overall of %d samples.\n",runPkts_1);
+    printf("(%d *%d) / %d ==> %g \n",difference_size, runPkts, sample_length, floor (((difference_size)*runPkts)/sample_length));
     double di=0;
     
     sender.exp_id=htonl(exp_id);
@@ -349,8 +350,8 @@ case 'L': /*pkt length maxima*/
     PktDept.tv_usec=0;
 
     while(di<runPkts_1){
-	//size=int(myRND1->Rnd());
-	      //  cout<< size<<"\n";		
+      //size=int(myRND1->Rnd());
+      //  cout<< size<<"\n";		
       sender.counter=htonl((int)di);
       sender.starttime=istart;
       sender.stoptime=istop;
@@ -385,15 +386,16 @@ case 'L': /*pkt length maxima*/
     stop=*s;
     }
 
+if(loglevel>1){
   gettimeofday(&GTOD_after,NULL);
   TSC_after=realcc();
   //  CPU_after=estimateCPU(40,100000,fname_cpu);
-
+  
   printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
   printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
   printf("CPU before: %f \n", CPU_before);
   printf("CPU after: %f \n", CPU_after);
-
+ }
 
 
   return 1;
@@ -431,7 +433,7 @@ void uPause(double noUsec){
        loops++;
    }
     if(loops>=1000000){
-      printf("sec loops 100000.\n ");
+      //printf("sec loops 100000.\n ");
     }
   }
 
@@ -441,9 +443,9 @@ void uPause(double noUsec){
       loops++;
   }
   if(loops>=1000000){
-    printf("usec loops 100000.\n ");
-    printf("Current %d s target %d s \t ",(int)s.tv_sec,(int)e.tv_sec   );
-    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+    //    printf("usec loops 100000.\n ");
+    //printf("Current %d s target %d s \t ",(int)s.tv_sec,(int)e.tv_sec   );
+    //printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
   }
   if(s.tv_sec>e.tv_sec){
     printf("s sec > e sec.\n ");
