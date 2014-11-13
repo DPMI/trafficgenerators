@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <iostream>
 #include <getopt.h>
+#include <assert.h>
 #define MAX_MSG 1500
 #define MAX_PDU	100000
 
@@ -64,6 +65,31 @@ void print_usage(){
       printf("                                  1--Packet log , 2--Packet log + CPU eval , 3-- complete .\n");
       printf("-l || --logpath <path>            Complete path where to store log, otherwise its logged where executed. \n");
       printf("\n");
+}
+
+fd_set master;
+int maxfd=0;
+
+/* add a fd to fd_set, and update max_fd */
+int safe_fd_set(int fd, fd_set* fds, int* max_fd) {
+  assert(max_fd != NULL);
+  
+  FD_SET(fd, fds);
+  if (fd > *max_fd) {
+    *max_fd = fd;
+  }
+  return 0;
+}
+
+/* clear fd from fds, update max fd if needed */
+int safe_fd_clr(int fd, fd_set* fds, int* max_fd) {
+  assert(max_fd != NULL);
+  
+  FD_CLR(fd, fds);
+  if (fd == *max_fd) {
+    (*max_fd)--;
+  }
+  return 0;
 }
 
 
@@ -264,6 +290,11 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
 
+  if(servertype==TCPd){
+    printf("TCP Server not properly implemented, want to make an effort?.\n");
+    exit(EXIT_FAILURE);
+  }
+
   char fname_cpu[200];
   char fpath[200];
   int mkdir_status;
@@ -375,6 +406,7 @@ int main(int argc, char *argv[])
   int cond=1;
   struct timeval accept_timeout;
   fd_set rset;
+  int maxfd;
 
   int selectReturn=0;
   
@@ -421,17 +453,21 @@ int main(int argc, char *argv[])
     cliLen = sizeof(cliAddr);
     
     FD_ZERO(&rset);
-    FD_SET(sd, &rset);
+    //    FD_SET(sd, &rset);
+    safe_fd_set(sd,&rset,&maxfd);
+
     accept_timeout.tv_sec=SERVER_TIMEOUT;
     accept_timeout.tv_usec=0;
     
     rstart=realcc();
-    selectReturn=select(sd+1,&rset,NULL,NULL,&accept_timeout);
+    printf("preselect.\n");
+    selectReturn=select(maxfd+1,&rset,NULL,NULL,&accept_timeout);
     if(selectReturn==-1){
       perror("Select Error:\n");
     } else if(selectReturn==0){
       printf("!TIMEOUT!\nSocket was idle for %d seconds.\n", SERVER_TIMEOUT);//(int)accept_timeout.tv_sec);
-      FD_SET(sd,&rset);
+      //      FD_SET(sd,&rset);
+      safe_fd_set(sd,&rset,&maxfd);
       accept_timeout.tv_sec=SERVER_TIMEOUT;
       accept_timeout.tv_usec=0;
       if(loglevel>0 && pktCount>0){
@@ -464,9 +500,12 @@ int main(int argc, char *argv[])
 	   printf("Sampling disabled.\n");
 	 }
 	 
-	 
-	 close(tcpSD);
-	 tcpSD=0;
+	 if(tcpSD){
+	   //	   FD_CLR(tcpSD,&rset);
+	   safe_fd_clr(tcpSD,&rset,&maxfd);
+	   close(tcpSD);
+	   tcpSD=0;
+	 }
 	 exp_id=run_id=key_id=0;
 	 cond=1;
       }else {
@@ -474,19 +513,35 @@ int main(int argc, char *argv[])
 	cond=0;
       }
     } else {
+
+      if(tcpSD!=0 && FD_ISSET(tcpSD,&rset)){ 
+	printf("Activity on SPAWNED socket.\n");
+      }
+      if(sd!=0 && FD_ISSET(sd,&rset)){ 
+	printf("Activity on MAIN socket.\n");
+      }
+      
+      
       if(servertype==TCPd && tcpSD==0){
-	cliLenT = sizeof(cliAddr);
+      	cliLenT = sizeof(cliAddr);
 	printf("accept()->;\n");
 	tcpSD = accept(sd,(struct sockaddr *)&cliAddr,&cliLenT);
 	printf("<-accept();\n");
+	//	FD_SET(tcpSD,&rset);
+	safe_fd_set(tcpSD,&rset,&maxfd);
+	printf("Added to select list.\n");
       }
+      
 
       switch(servertype){
       case UDPd:
 	n = recvfrom(sd, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
 	break;
       case TCPd:
+	printf("tcpRecv.\n");
+
 	n = recvfrom(tcpSD, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLenT);
+	printf("got %d bytes \n",n);
 	break;
       }
 
@@ -547,7 +602,7 @@ int main(int argc, char *argv[])
 	    if(msgcounter!=0) {
 	      printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
 	    }
-	  } else {
+	  } else { //counter=-1
 	    msgcounter++;
 	    if(msgcounter!=ntohl(message->counter)){
 	      if(ntohl(message->counter)==0) {
@@ -605,9 +660,7 @@ int main(int argc, char *argv[])
   
 }
 
-void
-close_con(int sig)
-{
+void close_con(int sig){
     setitimer(ITIMER_REAL,&diftime,NULL);
     gettimeofday(&tid2,NULL);
     if((tid3.tv_sec+10)<=tid2.tv_sec){

@@ -34,7 +34,7 @@ all: $(OBJECTa)	$(OBJECTb) $(OBJECTc) $(OBJECTd) $(OBJECTe) $(OBJECT)
 
 clean:
 	rm -f *.o *.exe
-	rm -r $(targeta) $(targetb) $(targetc) $(targetd) $(targete)
+	rm -r $(targeta) $(targetb) $(targetc) $(targetd) $(targete) $(target)
 
 server.o: server.cpp
 	$(COMPILE) $(CARG) server.cpp

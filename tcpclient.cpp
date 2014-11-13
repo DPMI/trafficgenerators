@@ -245,8 +245,8 @@ int main (int argc, char *argv[]) {
 		myRND2=new RNDDET(waittime1);
 	 	break;
   }
-(*myRND1).printseed();
-(*myRND2).printseed();
+  (*myRND1).printseed();
+  (*myRND2).printseed();
 
 
   /* get server IP address (no check if input is IP address or DNS name */
