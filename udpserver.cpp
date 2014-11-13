@@ -279,7 +279,7 @@ int main(int argc, char *argv[])
   
   /* bind local server port */
   servAddr.sin_family = AF_INET;
-  servAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
   servAddr.sin_port = htons(LOCAL_SERVER_PORT);
   timeout=0;
   timeout_value=2;
