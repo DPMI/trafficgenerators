@@ -90,6 +90,7 @@ int main(int argc, char *argv[]) {
 	{"pktdist", required_argument,0,'m'},	
 	{"pktLenmin", required_argument, 0, 'l'},
         {"pktLenMax", required_argument, 0, 'L'},
+	{"pktLen",required_argument,0,'a'},
 	{"waitdist", required_argument, 0, 'v'},
 	{"waittimmin", required_argument, 0, 'w'},
         {"waittimemax", required_argument, 0, 'W'},
@@ -110,7 +111,7 @@ int main(int argc, char *argv[]) {
   reqFlag=0;
   size=1224;
   sleepTime=-1;
- size1=1224;
+  size1=1224;
   waittime=0;  
   while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:m:l:L:v:w:W:z:h",long_options, &option_index))!=EOF) {
     switch (op){
@@ -142,17 +143,23 @@ int main(int argc, char *argv[]) {
       psd=*optarg;
       cout <<" PSD is"<<psd <<"\n" ;
       break;
-    case 'l': /*pkt length*/
+    case 'l': /*pkt length min*/
       size=atoi(optarg);
       cout<< "Min packet Size is "<<size <<"\n";
       break;
-case 'L': /*pkt length maxima*/
+    case 'L': /*pkt length maximal*/
       size1=atoi(optarg);
       cout<< "Max packet Size is "<<size1 <<"\n";
       break;
+      
+    case 'a' : /* packet length */
+      size=atoi(optarg);
+      size1=atoi(optarg);
+      cout << "Packet size is " << size  << "\n";
+      break;
     case 'v': /* distribution*/
-	wtd=*optarg;
-	break;
+      wtd=*optarg;
+      break;
     case 'w': /*pkt length*/
       sleepTime=atoi(optarg);
       waittime=sleepTime;
@@ -180,7 +187,9 @@ case 'L': /*pkt length maxima*/
       printf(" -s (--server) Destination Server [required] \n");
       printf(" -p (--port) <Destination Port> [optional default = 1500] \n");
       printf(" -n (--pkts) <Number of packets to send> [optional default = forever]\n");
-      printf(" -l (--pktLen) <Packet Length> [bytes] [optional default = 1224]\n\n");
+      printf(" -l (--pktLenmin) <Packet Length> [bytes] [optional default = 1224]\n");
+      printf(" -L (--pktLenmax) <Packet Length> [bytes] [optional default = 1224]\n");
+      printf("    --pktLen <Packet Length> [bytes] [ Optional, sets min=max=<value>\n");
       printf(" -m (--pktsize distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
       printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
       printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
@@ -329,7 +338,11 @@ case 'L': /*pkt length maxima*/
   //sample_length = 2;
   printf("Size1 %d, size = %d \n", size1,size);
   difference_size = size1 -size;
+
+  printf("difference_size = %d , runPkts = %d , sample_length = %d , runPkts = %d \n");
+
   runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
+  printf("runType = %d \n", runType);
   if(runType==1) {
     printf("will run %g pkts for each size.\n",runPkts);
     printf("Experiment will run an overall of %d samples.\n",runPkts_1);
@@ -367,7 +380,9 @@ case 'L': /*pkt length maxima*/
 	close(sd);
 	exit(1);
       }
-      //	printf("%d\t %llu\t %llu\n", sender.counter, istart,istop);
+      if(loglevel>1){
+	printf("Sent ; %d < %d \n", (int)di, (int)runPkts_1);
+      }
       di++;
 	if (int (di) %(int)runPkts == 0)
 	{
