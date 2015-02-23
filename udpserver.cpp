@@ -84,6 +84,7 @@ double estimateCPU(int samples, int sleeptime, char* fname);
 double samplefreq;
 int runAsDaemon;
 char *logpath;
+char fpath[200];
 
 u_int64_t sumipts=0,sumipgs=0,sumiptr=0,sumipgr=0;  /*to keep the previous pkt recv cpu counter*/
 int pcounter,m,js=0,jr=0; /*previou pkt sequence number*/
@@ -225,7 +226,7 @@ int main(int argc, char *argv[])
     exit(EXIT_FAILURE);
   }
   char fname_cpu[200];
-  char fpath[200];
+
   int mkdir_status;
   bzero(&fname_cpu,200);
   /*
@@ -378,7 +379,7 @@ int main(int argc, char *argv[])
       if(loglevel>0 && pktCount>0){
 	printf("Writing to file\n");
 	sprintf(fpath,"%s/%d",logpath,exp_id);
-	mkdir_status=mkdir(fpath,S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+	mkdir_status=mkdir(fpath,S_IRWXU | S_IRWXG | S_IRWXO );
 	printf("Result of mkdir %d, for mkdir(%s).\n",mkdir_status,fpath);
 	output_file(exp_id,run_id, logdat,pducount, CPU_before);
       }
@@ -566,7 +567,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   strcat(fname, filename);
   strcat(fname, "_server.txt");
   */
-  sprintf(fname,"%d/udpserver-%d-%d.txt",eid,eid,rid);
+  sprintf(fname,"%s/udpserver-%d-%d.txt",fpath,eid,rid);
   
 
   FILE *pFile;
