@@ -21,7 +21,7 @@
 #include "sample.h"
 
 int LOCAL_SERVER_PORT= 1500;
-int SERVER_TIMEOUT=10;
+int SERVER_TIMEOUT=5;
 void alarmHandler(int signo);
 int timeout;
 int timeout_value;
@@ -59,7 +59,7 @@ struct pdudata{
 void Sample(int sig);
 void output_file(u_int32_t, u_int32_t,struct pdudata[],int, double);
 //struct pduinfo recvpdu[MAX_PDU];
-struct pdudata logdat[MAX_PDU];
+struct pdudata logdat[MAX_PDU+1];
 int pducount=0;
 
 double byteCount,pktCount;
@@ -305,12 +305,12 @@ int main(int argc, char *argv[])
   //    setitimer(ITIMER_REAL,&diftime,NULL);
   
   struct tm *file_stime;
-  gettimeofday(&tidf,NULL);
   char file_name[20];
+  gettimeofday(&tidf,NULL);
   file_name[19]='\0';
   file_stime=localtime(&tidf.tv_sec);
   strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
-  printf("File Started at %s\n", file_name);
+  printf("[%s] Started\n", file_name);
 
 
   m=0; /*for pduinfo array*/
@@ -372,19 +372,29 @@ int main(int argc, char *argv[])
     if(selectReturn==-1){
       perror("Select Error:\n");
     } else if(selectReturn==0){
-      printf("!TIMEOUT!\nSocket was idle for %d seconds.\n", SERVER_TIMEOUT);//(int)accept_timeout.tv_sec);
+      if(loglevel>2){
+	printf("!TIMEOUT!\nSocket was idle for %d seconds.\n", SERVER_TIMEOUT);//(int)accept_timeout.tv_sec);
+      }
+
       FD_SET(sd,&rset);
       accept_timeout.tv_sec=SERVER_TIMEOUT;
       accept_timeout.tv_usec=0;
       if(loglevel>0 && pktCount>0){
-	printf("Writing to file\n");
+	 gettimeofday(&tidf,NULL);
+	 file_name[19]='\0';
+	 file_stime=localtime(&tidf.tv_sec);
+	 strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
+	 printf("[%s] ", file_name);
+	 printf("Timeout, saving log, ");
 	sprintf(fpath,"%s/%d",logpath,exp_id);
 	mkdir_status=mkdir(fpath,S_IRWXU | S_IRWXG | S_IRWXO );
-	printf("Result of mkdir %d, for mkdir(%s).\n",mkdir_status,fpath);
+	printf("mkdir(%s)=>%d.\n",fpath,mkdir_status);
 	output_file(exp_id,run_id, logdat,pducount, CPU_before);
       }
       if(runAsDaemon){
-	printf("Running as Daemon.\n");
+	if(loglevel>2){
+	  printf("Running as Daemon.\n");
+	}
 	/*Clean up */
 	 pktCount=0;
 	 byteCount=0;
@@ -403,7 +413,9 @@ int main(int argc, char *argv[])
 	   signal(SIGALRM, Sample);
 	   setitimer(ITIMER_REAL,&sampletimeOff,NULL); //used for termination with SIGALRM
 	    } else {
-	   printf("Sampling disabled.\n");
+	   if (loglevel>2){
+	     printf("Sampling disabled.\n");
+	   }
 	 }
 	 
 	 
@@ -449,18 +461,27 @@ int main(int argc, char *argv[])
 	    printf("CharError is %d\n",charErr);
 	  }
 	  if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
-	    printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	     gettimeofday(&tidf,NULL);
+	     file_name[19]='\0';
+	     file_stime=localtime(&tidf.tv_sec);
+	     strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
+	     printf("[%s] ", file_name);
+	     printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
 	    
 	  }
 	  
 	  if( (counter==-1) ){
 	    if(dT!=0){
 	      gettimeofday(&theTime, NULL);
-	      printf("Initializing the sampling every %g second.\n",dT);
+	      if (loglevel>1){
+		printf("Initializing the sampling every %g second.\n",dT);
+	      }
 	      signal(SIGALRM, Sample);
 	      setitimer(ITIMER_REAL,&sampletime,NULL); //used for termination with SIGALRM
 	    } else {
-	      printf("Sampling disabled.\n");
+	      if (loglevel>1){
+		printf("Sampling disabled.\n");
+	      }
 	    }
 	    msgcounter=ntohl(message->counter); /* Init the counter */
 	    if(wildcard==1){
@@ -468,7 +489,9 @@ int main(int argc, char *argv[])
 	      run_id=ntohl(message->run_id);
 	      key_id=ntohl(message->key_id);
 	    }
-	    printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	    if (loglevel>1){
+	      printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	    }
 	    if(msgcounter!=0) {
 	      printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
 	    }
@@ -487,6 +510,15 @@ int main(int argc, char *argv[])
 	  
 	  counter++;
 	  int arrpos=ntohl(message->counter);
+	  if (arrpos > MAX_PDU) {
+	     gettimeofday(&tidf,NULL);
+	     file_name[19]='\0';
+	     file_stime=localtime(&tidf.tv_sec);
+	     strftime(file_name,20,"%Y-%m-%d %H.%M.%S",file_stime);
+	     printf("[%s] Received more than %d PDUS, overwriting.\n", file_name,MAX_PDU);
+	     arrpos=MAX_PDU;
+	  }
+
 	  //Store the SEQnr of this PDU
 	  logdat[arrpos].seq_no=arrpos;
 	  // Store the sending time of the previous PDU
@@ -549,7 +581,7 @@ close_con(int sig)
 
 
 void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq){
-  printf(">output_file(%d,%d, %p, %d)\n",eid, rid, &rpdu, sz);
+  //  printf(">output_file(%d,%d, %p, %d)\n",eid, rid, &rpdu, sz);
   int n,rc=0;
   u_int64_t iptr=0,ipts=0, ipgr=0,ipgs=0;
   //  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
@@ -571,7 +603,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   
 
   FILE *pFile;
-  printf("LOGGING DATA to %s.\n", fname);
+  printf("\t saving to %s.\n", fname);
   pFile=fopen(fname,"a+");
   if(pFile==NULL){
     printf("Problems with file.\n");
@@ -633,7 +665,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
     //rpdu[n].recv_stop=0; 
   } 
   fclose(pFile);
-  printf("<output_file()\n");
+  //  printf("<output_file()\n");
   return;
 }
 

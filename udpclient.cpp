@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
   double CPU_before, CPU_after;
   struct timeval GTOD_before, GTOD_after, PktDept;
   u_int64_t TSC_before,TSC_after;
-  int loglevel=3;
+  int loglevel=1;
  
   int runType; /* 0= default, forever, 1= nopkts, 2=time */
   noBreak=1;
