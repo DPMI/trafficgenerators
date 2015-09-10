@@ -6,6 +6,11 @@ LINK=g++
 GIT=git
 CARG=-c -O4 -Wall -DVERSION=\"$(GIT_VERSION)\"
 
+DESTDIR=/
+PREFIX=$(DESTDIR)/usr/local
+DEPDIR=.deps
+
+
 OBJECTa= udpclient.o rnd.o
 OBJECTb= udpserver.o sample.o 
 OBJECTc= tcpclient.o rnd.o
@@ -35,6 +40,16 @@ all: $(OBJECTa)	$(OBJECTb) $(OBJECTc) $(OBJECTd) $(OBJECTe) $(OBJECT)
 clean:
 	rm -f *.o *.exe
 	rm -r $(targeta) $(targetb) $(targetc) $(targetd) $(targete) $(target)
+
+install: 
+	install -m 0755 udpclient $(PREFIX)/bin
+	install -m 0755 udpserver $(PREFIX)/bin
+	install -m 0755 tcpclient $(PREFIX)/bin
+	install -m 0755 tcpserver $(PREFIX)/bin
+	install -m 0755 icmpclient $(PREFIX)/bin
+	install -m 0755 server $(PREFIX)/bin
+
+
 
 server.o: server.cpp
 	$(COMPILE) $(CARG) server.cpp
