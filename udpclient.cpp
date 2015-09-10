@@ -1,5 +1,3 @@
-//modified on dec 12 for pal to enable cbr..
-
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -380,10 +378,10 @@ int main(int argc, char *argv[]) {
     //    printf(" Should be fixed. \n");
     runPkts_1 = runPkts;
   }
-  
-    printf("<INPUT> runType = %d runPkts = %g ", runType,runPkts);
-    printf("runPkts_1 = %g </INPUT>\n", runPkts_1);
-  
+  /*
+    printf("runType = %d runPkts = %g ", runType,runPkts);
+    printf("runPkts_1 = %g \n", runPkts_1);
+  */
 
   if(runType==1) {
     printf("will run %g pkts for each size.\n",runPkts);
