@@ -66,7 +66,8 @@ int main(int argc, char *argv[]) {
   char *serverName=0;
   u_int32_t exp_id,run_id,key_id;
   exp_id=run_id=key_id=0;
-
+  sample_length = -1; 
+  runPkts_1 = 0;
   double CPU_before, CPU_after;
   struct timeval GTOD_before, GTOD_after, PktDept;
   u_int64_t TSC_before,TSC_after;
@@ -92,7 +93,8 @@ int main(int argc, char *argv[]) {
         {"pktLenMax", required_argument, 0, 'L'},
 	{"pktLen",required_argument,0,'a'},
 	{"waitdist", required_argument, 0, 'v'},
-	{"waittimmin", required_argument, 0, 'w'},
+	{"waittime", required_argument, 0, 'i'},
+	{"waittimemin", required_argument, 0, 'w'},
         {"waittimemax", required_argument, 0, 'W'},
 	{"samplelength", required_argument, 0, 'z'},
 	{"help", required_argument, 0, 'h'},
@@ -113,7 +115,7 @@ int main(int argc, char *argv[]) {
   sleepTime=-1;
   size1=1224;
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:m:l:L:v:w:W:z:h",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:m:l:L:v:i:w:W:z:h",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e':/*exp_id*/
       exp_id=(u_int32_t)atoi(optarg);
@@ -141,7 +143,23 @@ int main(int argc, char *argv[]) {
       break;
     case 'm': /*pkt size distribution*/
       psd=*optarg;
-      cout <<" PSD is"<<psd <<"\n" ;
+      /*      cout <<" Packet Size Distribution: ";
+      switch (psd){
+      case'e':
+	cout << "Exponential.";
+	break;
+      case'u':
+	cout << "Uniform.";
+	break;
+      case'd':
+	cout << "Uniform Discrete.";
+	break;
+      default:
+	cout << "Discrete.";
+	break;
+      }
+      cout << "(" << psd <<")\n" ;
+      */
       break;
     case 'l': /*pkt length min*/
       size=atoi(optarg);
@@ -160,6 +178,12 @@ int main(int argc, char *argv[]) {
     case 'v': /* distribution*/
       wtd=*optarg;
       break;
+    case 'i': /* wait time*/
+      sleepTime=atoi(optarg);
+      waittime=sleepTime;
+      waittime1=sleepTime;
+      break;
+
     case 'w': /*pkt length*/
       sleepTime=atoi(optarg);
       waittime=sleepTime;
@@ -167,7 +191,7 @@ int main(int argc, char *argv[]) {
       break;
    case 'W': /*wait time maxima*/
       sleepTime1=atoi(optarg);
-       cout<<"sleeptime Max is "<<sleepTime<<"\n";
+      cout<<"sleeptime Max is "<<sleepTime<<"\n";
       waittime1=sleepTime1;
       reqFlag=4;
       break;   
@@ -190,10 +214,15 @@ int main(int argc, char *argv[]) {
       printf(" -l (--pktLenmin) <Packet Length> [bytes] [optional default = 1224]\n");
       printf(" -L (--pktLenmax) <Packet Length> [bytes] [optional default = 1224]\n");
       printf("    --pktLen <Packet Length> [bytes] [ Optional, sets min=max=<value>\n");
-      printf(" -m (--pktsize distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
-      printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
-      printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
-      printf(" -z  Enter the sample length (integer)\n");      
+      printf(" -m (--pktdist) e- exponential u- uniform d- discrete uniform default- deterministic\n");
+      printf(" \n");
+      printf(" -i (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
+      printf(" -w (--waittimemin) <inter frame gap, in usec.> [optional ] .\n");
+      printf(" -W (--waittimemax) <inter frame gap, in usec.> [optional ] .\n");
+      printf(" -v (--waitdist) e- exponential u- uniform d- discrete uniform default- deterministic\n");
+      printf(" \n");
+      printf(" -z  Enter the sample length (integer) (optional) ");
+      printf("        If used then it will be the number of samples per packet size in the distribution.)\n");      
       printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
       printf(" If neither is defined the software will run forever, or atleast until terminated. \n\n");
       break;
@@ -219,53 +248,58 @@ int main(int argc, char *argv[]) {
 
   RND* myRND1;// packet size distribution
   RND* myRND2; // wait time distribution
+  printf("Packet size distribution: ");
   switch(psd){
-	case 'e':
-		printf("Expontial...");
-		myRND1=new RNDEXP(size1);
-	//	RNDEXP myRND1(size1);
-	break;
-	case 'u':
-		printf("Uniform...");
-		myRND1=new RNDUNIF(size,size1);
-		//RNDUNIF myRND1(size,size1);		
-	break;
-
-	case 'd':
-               printf ("uniform discrete");
-                myRND1 = new RNDUNID(size,size1);
-		//RNDUNID myRND1(size,size1);
-               break;
-	default:
-	printf("DEfault is to deterministic ");
-		myRND1=new RNDDET(size1);
-		//RNDDET myRND1(size1);
-	 	break;
+  case 'e':
+    printf("Expontial, rndexp(%d).\n",size1);
+    myRND1=new RNDEXP(size1);
+    //	RNDEXP myRND1(size1);
+    break;
+  case 'u':
+    printf("Uniform, rndunif(%d,%d)\n",size,size1);
+    myRND1=new RNDUNIF(size,size1);
+    //RNDUNIF myRND1(size,size1);		
+    break;
+    
+  case 'd':
+    printf ("Uniform Discrete, rndunid(%d,%d).\n",size,size1);
+    myRND1 = new RNDUNID(size,size1);
+    //RNDUNID myRND1(size,size1);
+    break;
+  default:
+    printf("Default is to deterministic, rnddet(%d).\n ",size1);
+    myRND1=new RNDDET(size1);
+    //RNDDET myRND1(size1);
+    break;
   }
-
+  
+  printf("Wait time distribution: ");
   switch(wtd){
-	case 'e':
-		printf("Expontial...");
-		myRND2=new RNDEXP(waittime1);
-	break;
-	case 'u':
-		printf("Uniform...");
-		myRND2=new RNDUNIF(waittime,waittime1);
-	break;
-
-	case 'd':
-         printf("uniform discrete");
-		myRND2=new RNDUNID(waittime,waittime1);
-          break;
-	default:
-	printf("DEfaults to determ");
-		myRND2=new RNDDET(waittime1);
-	 	break;
+  case 'e': 
+    printf("Expontial, rndexp(%g)\n",waittime1);
+    myRND2=new RNDEXP(waittime1);
+    break;
+  case 'u':
+    printf("Uniform, rndunif(%g,%g)\n",waittime,waittime1);
+    myRND2=new RNDUNIF(waittime,waittime1);
+    break;
+    
+  case 'd':
+    printf("Uniform Discrete, rndunid(%g,%g).\n",waittime,waittime1);
+    myRND2=new RNDUNID(waittime,waittime1);
+    break;
+  default:
+    printf("Defaults to deterministic, rnddet(%g)\n",waittime1);
+    myRND2=new RNDDET(waittime1);
+    break;
   }
- 
+  
+	 printf("Seeds:\n");
+	 printf("\tPktsize: ");
 (*myRND1).printseed();
+	 printf("\tWaittime: ");
 (*myRND2).printseed();
-
+	 
   char fname_cpu[200];
   bzero(&fname_cpu,200);
   /*
@@ -283,7 +317,7 @@ int main(int argc, char *argv[]) {
     printf("Estimated cpu to %f Hz.\n",CPU_before); 
   }
 
-  printf("%s\nSending data to %s:%s port %d)\n", argv[0], h->h_name,inet_ntoa(*(struct in_addr *)h->h_addr_list[0]),REMOTE_SERVER_PORT);
+  printf("%s: Sending data to %s (%s:%d)\n", argv[0], h->h_name,inet_ntoa(*(struct in_addr *)h->h_addr_list[0]),REMOTE_SERVER_PORT);
   remoteServAddr.sin_family = h->h_addrtype;
   memcpy((char *) &remoteServAddr.sin_addr.s_addr, h->h_addr_list[0], h->h_length);
   remoteServAddr.sin_port = htons(REMOTE_SERVER_PORT);
@@ -333,20 +367,30 @@ int main(int argc, char *argv[]) {
   
   //    cout<<s->tv_sec<<","<<s->tv_usec<<endl;
   start=*s;
-  
+
   // ((L-l)*num of samples )/sample_length
   //sample_length = 2;
-  printf("Size1 %d, size = %d \n", size1,size);
-  difference_size = size1 -size;
+  if (sample_length > 0){
+    printf("Adapting number of packets, as to reach the desired sample size.\n"); 
+    printf("Size1 %d, size = %d \n", size1,size);
+    difference_size = size1 -size;
+    printf("difference_size = %d , runPkts = %g , sample_length = %d , runPkts = %g \n", difference_size,runPkts,sample_length, runPkts_1);
+    runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
+  } else {
+    //    printf(" Should be fixed. \n");
+    runPkts_1 = runPkts;
+  }
+  
+    printf("<INPUT> runType = %d runPkts = %g ", runType,runPkts);
+    printf("runPkts_1 = %g </INPUT>\n", runPkts_1);
+  
 
-  printf("difference_size = %d , runPkts = %d , sample_length = %d , runPkts = %d \n");
-
-  runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
-  printf("runType = %d \n", runType);
   if(runType==1) {
     printf("will run %g pkts for each size.\n",runPkts);
-    printf("Experiment will run an overall of %d samples.\n",runPkts_1);
-    printf("(%d *%d) / %d ==> %g \n",difference_size, runPkts, sample_length, floor (((difference_size)*runPkts)/sample_length));
+    printf("Experiment will run an overall of %g samples.\n",runPkts_1);
+    if (sample_length>0){
+      printf("(%d *%d) / %g ==> %g \n",difference_size, runPkts, sample_length, floor (((difference_size)*runPkts)/sample_length));
+    }
     double di=0;
     
     sender.exp_id=htonl(exp_id);
@@ -397,9 +441,10 @@ int main(int argc, char *argv[]) {
       //       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
       uPause(waittime);
     }
+    printf("Sent %d pkts.\n",(int)di); 
     gettimeofday(s,NULL);
     stop=*s;
-    }
+  }
 
 if(loglevel>1){
   gettimeofday(&GTOD_after,NULL);
