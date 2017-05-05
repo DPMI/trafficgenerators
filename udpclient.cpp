@@ -375,7 +375,7 @@ int main(int argc, char *argv[]) {
     printf("difference_size = %d , runPkts = %g , sample_length = %d , runPkts = %g \n", difference_size,runPkts,sample_length, runPkts_1);
     runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
   } else {
-    //    printf(" Should be fixed. \n");
+    printf("Fixed no pkts. \n");
     runPkts_1 = runPkts;
   }
   /*
@@ -404,41 +404,73 @@ int main(int argc, char *argv[]) {
     PktDept.tv_sec=0;
     PktDept.tv_usec=0;
 
-    while(di<runPkts_1){
-      //size=int(myRND1->Rnd());
-      //  cout<< size<<"\n";		
-      sender.counter=htonl((int)di);
-      sender.starttime=istart;
-      sender.stoptime=istop;
-      sender.depttime=PktDept;
-      istart=realcc();
-      rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
-      
-      istop=realcc();
-      gettimeofday(&PktDept,NULL); 
-
-      if(rc<0)          {
-	printf("%s: cannot send data %d \n",argv[0],(int)(di-1));
-	close(sd);
-	exit(1);
-      }
-      if(loglevel>1){
-	printf("Sent ; %d < %d \n", (int)di, (int)runPkts_1);
-      }
-      di++;
-	if (int (di) %(int)runPkts == 0)
-	{
-	size1 = size1 - sample_length;
-	
+    if(runPkts_1==-1) {
+      printf("Will run forever....\n");
+      printf("Sending %d bytes.\n", size1);
+      while(true){
+	sender.counter=htonl((int)di);
+	sender.starttime=istart;
+	sender.stoptime=istop;
+	sender.depttime=PktDept;
+	istart=realcc();
+	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
+	istop=realcc();
+	gettimeofday(&PktDept,NULL);
+	if(rc<0)          {
+	  printf("%s: cannot send data %d, error was %d and size was %d \n",argv[0],(int)(di-1),rc,size1);
+	  close(sd);
+	  exit(1);
 	}
+	if(loglevel>1){
+	  printf("Sent ; %d < %d \n", (int)di, (int)runPkts_1);
+	}
+	di++;
+
+	if(int(di)%1000==0) {
+	  cout << di << " pkts." <<endl;
+	}
+	waittime=myRND2->Rnd();
+	//       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
+	uPause(waittime);
+      }      
       
-      if(int(di)%1000==0) {
-	cout << di << " pkts." <<endl;
+      
+    } else {
+      printf("This is a finite run.\n");
+      while(di<runPkts_1){
+	sender.counter=htonl((int)di);
+	sender.starttime=istart;
+	sender.stoptime=istop;
+	sender.depttime=PktDept;
+	istart=realcc();
+	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
+	istop=realcc();
+	gettimeofday(&PktDept,NULL); 
+	if(rc<0)          {
+	  printf("%s: cannot send data %d \n",argv[0],(int)(di-1));
+	  close(sd);
+	  exit(1);
+	}
+	if(loglevel>1){
+	  printf("Sent ; %d < %d \n", (int)di, (int)runPkts_1);
+	}
+	di++;
+	if (int (di) %(int)runPkts == 0)
+	  {
+	    size1 = size1 - sample_length;
+	    
+	  }
+	
+	if(int(di)%1000==0) {
+	  cout << di << " pkts." <<endl;
+	}
+	waittime=myRND2->Rnd();
+	//       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
+	uPause(waittime);
       }
-      waittime=myRND2->Rnd();
-      //       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
-      uPause(waittime);
+
     }
+    
     printf("Sent %d pkts.\n",(int)di); 
     gettimeofday(s,NULL);
     stop=*s;
