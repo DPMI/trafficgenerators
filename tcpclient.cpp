@@ -248,6 +248,8 @@ int main (int argc, char *argv[]) {
   (*myRND1).printseed();
   (*myRND2).printseed();
 
+  double pps= (1e6/(double)(waittime1));
+
 
   /* get server IP address (no check if input is IP address or DNS name */
   h = gethostbyname(serverName);
@@ -330,6 +332,8 @@ difference_size = size1 -size;
     istart=0;
     istop=0;
 
+    printf("should take %g seconds .\n", (double)(runPkts_1)/pps);
+
     while(di<runPkts_1){
     // size=int(myRND1->Rnd());
      //    cout<< size<<"\n";
@@ -385,51 +389,56 @@ void uPause(double noUsec){
   int loops=0;
   int secs=(int)floor((double)noUsec/1000000.0);
   double usecs=noUsec-secs*1000000;
-  gettimeofday(&s,NULL);
-  e.tv_sec=s.tv_sec+secs; 
- 
-  if(secs>0) {
-  	secJump=1;
-	if(secs>1){
-	  printf("Sec %d s!!",secs); 
-	}
 
-  }
-  if(s.tv_usec+usecs>1000000) {
-    e.tv_sec=e.tv_sec+1;
-    e.tv_usec=s.tv_usec+(long int)usecs-1000000;
-    secJump=1;
+   if(noUsec>10000) {
+    //    printf("Look Im slow.\n");
+    usleep(noUsec);
   } else {
-    e.tv_usec=s.tv_usec+(long int)usecs;
-  }
-  
-  if(secJump==1) {
-    while(s.tv_sec<e.tv_sec && loops<1000000 ){
+     gettimeofday(&s,NULL);
+     e.tv_sec=s.tv_sec+secs; 
+     
+     if(secs>0) {
+       secJump=1;
+       if(secs>1){
+	 printf("Sec %d s!!",secs); 
+       }
+     }
+     if(s.tv_usec+usecs>1000000) {
+       e.tv_sec=e.tv_sec+1;
+       e.tv_usec=s.tv_usec+(long int)usecs-1000000;
+       secJump=1;
+     } else {
+       e.tv_usec=s.tv_usec+(long int)usecs;
+     }
+     
+     if(secJump==1) {
+       while(s.tv_sec<e.tv_sec && loops<1000000 ){
+	 gettimeofday(&s,NULL);
+	 loops++;
+       }
+       if(loops>=1000000){
+	 printf("sec loops 100000.\n ");
+       }
+     }
+     
+     loops=0;
+     while(s.tv_sec<=e.tv_sec && s.tv_usec<e.tv_usec && loops<1000000 ){
        gettimeofday(&s,NULL);
        loops++;
+     }
+     if(loops>=1000000){
+       printf("usec loops 100000.\n ");
+       printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
+       printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+     }
+     if(s.tv_sec>e.tv_sec){
+       printf("s sec > e sec.\n ");
+       printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
+       printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+     }
+     
+     gettimeofday(&s,NULL);
    }
-    if(loops>=1000000){
-      printf("sec loops 100000.\n ");
-    }
-  }
-
-  loops=0;
-  while(s.tv_sec<=e.tv_sec && s.tv_usec<e.tv_usec && loops<1000000 ){
-      gettimeofday(&s,NULL);
-      loops++;
-  }
-  if(loops>=1000000){
-    printf("usec loops 100000.\n ");
-    printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
-    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
-  }
-  if(s.tv_sec>e.tv_sec){
-    printf("s sec > e sec.\n ");
-    printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
-    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
-  }
-
-  gettimeofday(&s,NULL);
 //  printf("<uPause(%g)\n", noUsec);
 }
 
