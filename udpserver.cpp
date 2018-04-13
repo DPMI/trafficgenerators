@@ -22,6 +22,7 @@
 
 int LOCAL_SERVER_PORT= 1500;
 int SERVER_TIMEOUT=5;
+int SERVER_ECHO=0;
 void alarmHandler(int signo);
 int timeout;
 int timeout_value;
@@ -117,6 +118,7 @@ int main(int argc, char *argv[])
     {"timeout", required_argument, 0, 't'},
     {"wildcard", no_argument, 0, 'w'},    
     {"daemon", no_argument, 0, 'd'},    
+    {"echo", no_argument, 0, 'x'},    
     {0,0,0,0}
     
   };
@@ -133,7 +135,7 @@ int main(int argc, char *argv[])
     logdat[i].recv_stop=0;
   }
   dT=0;
-  while ( (op =getopt_long(argc, argv, "t:f:k:e:r:p:hdL:l:w",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "t:f:k:e:r:p:hdxL:l:w",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e': /* experiment_id */
       exp_id=(u_int32_t)atoi(optarg);
@@ -164,6 +166,9 @@ int main(int argc, char *argv[])
       runAsDaemon=1;
       wildcard=1;
       break;
+    case 'x': 
+      SERVER_ECHO=1;
+      break;
     case 't':
       SERVER_TIMEOUT=atoi(optarg);
       break;
@@ -190,14 +195,15 @@ int main(int argc, char *argv[])
       printf("-w || --wildcard                  If used, it will NOT accept the first packet recieve \n");
       printf("                                  and use the data found in it as expid,runid, keyid. \n");
       printf("-p || --port_no 	     <port>	Port to listen on, default %d\n", LOCAL_SERVER_PORT);
-
+      printf("                                       \n");
       printf("-e || --experiment_id  <id>       Experiment id [optional]\n");
       printf("-r || --run_id	     <runid>	Run id [optional]\n");
       printf("-k || --key_id	     <keyid>	Key id [optional]\n");
-
+      printf("                                       \n");
       printf("-f || --freq    	     <freq>	Sample frequency, default 0 -- No sampling.\n");
       printf("                                  Print status messages periodically.\n");
-
+      printf("-x || --echo                      Echo messages.\n");
+      printf("                                       \n");
       printf("-h   help \n");
       printf("-L  --log              <level>    Logs recived data and CPU info to file\n");
       printf("                                  Logs the data into a directory <experiment_id> that must\n");
@@ -449,7 +455,7 @@ int main(int argc, char *argv[])
 	  }
 	  charErr=0;
 	  //	printf("Payload is %d bytes.\n", n);
-	  for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1500));Acounter++){
+	  for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1484));Acounter++){
 	    if(message->junk[Acounter]!='x'){
 	      printf("Err: %c (%d) ", (message->junk[Acounter]),Acounter);
 	      charErr++;
@@ -535,6 +541,17 @@ int main(int argc, char *argv[])
 	  
 	  pducount++;  	    	
 	  
+	  if (SERVER_ECHO) {
+	    message->recvstarttime=rstart;
+	    message->recvstoptime=rstop;
+	    message->recvtime=PktArr;
+
+	    rc=sendto(sd, msg,n, 0,(struct sockaddr *) &cliAddr,sizeof(cliAddr));//size> app head
+	    if (rc<0){
+	      printf("Issues with sending.\n");
+	    }
+	  }
+
 	  //	printf("%d\t %llu\t %llu\n", message->counter, rstart, rstop);
 	  rstart=0;
 	  rstop=0;

@@ -13,5 +13,8 @@ typedef struct{
   u_int64_t starttime;
   u_int64_t stoptime;
   timeval depttime;
-  char junk[1500];
+  u_int64_t recvstarttime;
+  u_int64_t recvstoptime;
+  timeval recvtime;
+  char junk[1484];
 }transfer_data;
