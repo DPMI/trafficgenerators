@@ -350,7 +350,7 @@ int main(int argc, char *argv[]) {
   transfer_data sender;
   //transfer_data *psender;
   
-  string test(1499,'x');
+  string test(1483,'x');
   strcpy(sender.junk, test.c_str());
   //    psender=&sender;
   
