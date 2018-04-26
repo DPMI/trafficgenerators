@@ -141,8 +141,7 @@ int  counter;
 u_int32_t msgcounter;
 
 static inline u_int64_t realcc(void){
-  u_int64_t cc;
-  asm volatile("rdtsc":"=&A"(cc));
+  u_int64_t cc =  __builtin_ia32_rdtsc();
   return cc;
 }
 

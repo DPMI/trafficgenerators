@@ -39,8 +39,7 @@ void randexpo(double a[], int xxx);
 double estimateCPU(int samples, int sleeptime, char* fname);
 
 static inline u_int64_t realcc(void){
- u_int64_t cc;
- asm volatile("rdtsc":"=&A"(cc));
+ u_int64_t cc =  __builtin_ia32_rdtsc();
  return cc;
 }
 //provide sample length no. of packets 32 x x x x x .. 32+ sample length..... 

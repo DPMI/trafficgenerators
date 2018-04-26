@@ -32,9 +32,8 @@ void killPrg(int sig);
 double estimateCPU(int samples, int sleeptime, char* fname);
 
 static inline u_int64_t realcc(void){
- u_int64_t cc;
- asm volatile("rdtsc":"=&A"(cc));
- return cc;
+  u_int64_t cc =  __builtin_ia32_rdtsc();
+  return cc;
 }
 
 struct timeval *s;
