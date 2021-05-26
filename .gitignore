@@ -1,0 +1,8 @@
+*.o
+server
+tcpserver
+udpserver
+udpclient
+tcpclient
+icmpclient
+udpecho

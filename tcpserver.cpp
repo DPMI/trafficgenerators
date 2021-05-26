@@ -232,35 +232,32 @@ servAddr.sin_family = AF_INET;
   int selectReturn=0;
   
   int Acounter=0;
-	int charErr=0;
-
-	if(dT>=1){
-		tidA.tv_sec=int(dT);
-		tidB.tv_sec=int(dT);
-		tidA.tv_usec=int((dT-int(dT))*1000000);
-		tidB.tv_usec=tidA.tv_usec;
-		} else {
-		tidA.tv_sec=0;
-		tidB.tv_sec=0;
-		tidA.tv_usec=int(dT*1000000);
-		tidB.tv_usec=tidA.tv_usec;
-	}
-	
-	sampletime.it_interval=tid1;
-	sampletime.it_value=tid2;
-
-	pktCount=0;
-	byteCount=0;
-        int iii = 0;
-   
+  int charErr=0;
+  
+  if(dT>=1){
+    tidA.tv_sec=int(dT);
+    tidB.tv_sec=int(dT);
+    tidA.tv_usec=int((dT-int(dT))*1000000);
+    tidB.tv_usec=tidA.tv_usec;
+  } else {
+    tidA.tv_sec=0;
+    tidB.tv_sec=0;
+    tidA.tv_usec=int(dT*1000000);
+    tidB.tv_usec=tidA.tv_usec;
+  }
+  
+  sampletime.it_interval=tid1;
+  sampletime.it_value=tid2;
+  
+  pktCount=0;
+  byteCount=0;
+  int iii = 0;
+  
   while(cond==1){
     /* init buffer */
     memset(msg,0x0,MAX_MSG);
     
     /* receive message */
-  printf("hej gggg111111\n");
-  printf("hello\n");
- printf("hej gggg");
     
     FD_ZERO(&rset);
     FD_SET(sd, &rset);
@@ -276,113 +273,115 @@ servAddr.sin_family = AF_INET;
       FD_SET(sd,&rset);
       accept_timeout.tv_sec=30;
       accept_timeout.tv_usec=0;
-
+      
       output_file(exp_id,run_id, logdat,pducount, CPU_before);
       cond=0;
     }
-else {
-        cliLen = sizeof(cliAddr);
- acceptor = accept(sd,(struct sockaddr *)&cliAddr,&cliLen);
+    else {
+      cliLen = sizeof(cliAddr);
+      acceptor = accept(sd,(struct sockaddr *)&cliAddr,&cliLen);
+      printf("Accepted Connection.\n");
 
-
-   printf("hej goij");
-    
-      n = recvfrom(acceptor, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
-     printf ("%d\n", n);
-      rstop=realcc();
-      gettimeofday(&PktArr,NULL);
-      if(n<0){
-	/*  printf("%s: cannot receive data \n",argv[0]); */
-	continue;
-      } else {
-	if(n<40){
-	  byteCount+=n;
-	  pktCount++;
-         
-	  printf("[%d]: Got small packet, %d \n", (int)pktCount,(int)byteCount);
-	} else {
-	/* print received message */
-	message=(transfer_data*)msg;
-         cout<< sizeof (message) <<"\n";
-	byteCount+=n;
-	pktCount++;
-         iii++;
-        printf("recieved packet no. %d \n",iii);
-	/*
-	printf("NORD:%d:%d:%d\n",message->exp_id,message->run_id,message->key_id);
-	printf("HORD:%d:%d:%d\n",ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id));
-	*/
-	charErr=0;
-	//	printf("Payload is %d bytes.\n", n);
-	for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1500));Acounter++){
-		if(message->junk[Acounter]!='x'){
-			//	printf("Err: %c (%d) ", (message->junk[Acounter]),Acounter);
-				charErr++;
-			} else {
-				//printf("Received: %c ", (message->junk[Acounter]));
-			}
-		}	
-	if(charErr>0){
-		//printf("CharError is %d\n",charErr);
-	}
-	if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
-	  printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
-	}
-
-	if( (counter==-1) ){
-
-		if(dT!=0){
-			gettimeofday(&theTime, NULL);
-			printf("Initializing the sampling every %g second.\n",dT);
-	 		signal(SIGALRM, Sample);
-	 		setitimer(ITIMER_REAL,&sampletime,NULL); //used for termination with SIGALRM
-		} else {
-			printf("Sampling disabled.\n");
-		}
-	  msgcounter=ntohl(message->counter); /* Init the counter */
-	  printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
-	  if(msgcounter!=0) {
-	    printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
-	  }
-	} else {
-	  msgcounter++;
-	  if(msgcounter!=ntohl(message->counter)){
-	    if(ntohl(message->counter)==0) {
-	      /* Probably a new client. Make no fuss about it.*/
-	      msgcounter=ntohl(message->counter);	
+      //
+	while( n = recvfrom(acceptor, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen) ) {
+	  printf ("Read %d bytes from recvfrom\n", n);
+	  rstop=realcc();
+	  gettimeofday(&PktArr,NULL);
+	  if(n<0){
+	    /*  printf("%s: cannot receive data \n",argv[0]); */
+	    continue;
+	  } else {
+	    if(n<40){
+	      byteCount+=n;
+	      pktCount++;         
+	      printf("[%d]: Got small packet, %d bytes.\n", (int)pktCount,(int)byteCount);
 	    } else {
-	      //	      printf("Packet missmatch, expected %d got %d, a loss of %d packets.\n",msgcounter, message->counter,message->counter-msgcounter);
-	      msgcounter=ntohl(message->counter);	
+	      /* print received message */
+	      message=(transfer_data*)msg;
+	      cout<< sizeof (message) <<"\n";
+	      byteCount+=n;
+	      pktCount++;
+	      iii++;
+	      printf("recieved packet no. %d \n",iii);
+	      /*
+		printf("NORD:%d:%d:%d\n",message->exp_id,message->run_id,message->key_id);
+		printf("HORD:%d:%d:%d\n",ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id));
+	      */
+	      charErr=0;
+	      //	printf("Payload is %d bytes.\n", n);
+	      for(Acounter=0;Acounter<(n-(sizeof(transfer_data)-1500));Acounter++){
+		if(message->junk[Acounter]!='x'){
+		  //	printf("Err: %c (%d) ", (message->junk[Acounter]),Acounter);
+		  charErr++;
+		} else {
+		  //printf("Received: %c ", (message->junk[Acounter]));
+		}
+	      }	
+	      if(charErr>0){
+		//printf("CharError is %d\n",charErr);
+	      }
+	      if( (ntohl(message->exp_id)!=exp_id) || (ntohl(message->run_id)!=run_id) || (ntohl(message->key_id)!=key_id) ){ 
+		printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+	      }
+	      
+	      if( (counter==-1) ){
+		
+		if(dT!=0){
+		  gettimeofday(&theTime, NULL);
+		  printf("Initializing the sampling every %g second.\n",dT);
+		  signal(SIGALRM, Sample);
+		  setitimer(ITIMER_REAL,&sampletime,NULL); //used for termination with SIGALRM
+		} else {
+		  printf("Sampling disabled.\n");
+		}
+		msgcounter=ntohl(message->counter); /* Init the counter */
+		printf("Initial message;%u:%u:%u;%u:%u:%u;(Got;expected)\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
+		if(msgcounter!=0) {
+		  printf("First packet did not hold 0 as it should, it contained the value %d.\n", msgcounter);
+		}
+	      } else {
+		msgcounter++;
+		if(msgcounter!=ntohl(message->counter)){
+		  if(ntohl(message->counter)==0) {
+		    /* Probably a new client. Make no fuss about it.*/
+		    msgcounter=ntohl(message->counter);	
+		  } else {
+		    //	      printf("Packet missmatch, expected %d got %d, a loss of %d packets.\n",msgcounter, message->counter,message->counter-msgcounter);
+		    msgcounter=ntohl(message->counter);	
+		  }
+		}
+		
+	      }
+	    }
+	
+	    counter++;
+	    int arrpos=ntohl(message->counter);
+	    //Store the SEQnr of this PDU
+	    logdat[arrpos].seq_no=arrpos;
+	    // Store the sending time of the previous PDU
+	    if((arrpos-1)>=0){
+	      logdat[arrpos-1].send_start=message->starttime;
+	      logdat[arrpos-1].send_stop=message->stoptime;
+	      logdat[arrpos-1].send_dept_time=message->depttime;
+	    }
+	    // Store the receive time of this PDU. 
+	    logdat[arrpos].recv_start=rstart;
+	    logdat[arrpos].recv_stop=rstop;
+	    logdat[arrpos].recv_arrival_time=PktArr;
+	    
+	    
+	    pducount++;  	    	
+	    
+	    printf("%d\t %llu\t %llu\n", ntohl(message->counter), rstart, rstop);
+	    rstart=0;
+	    rstop=0;
+	    if(counter%10000==0 && counter!=0) {
+	      //	  printf("%s: from %s:UDP:%u  COUNTER= %d \n",argv[0],inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port), message->counter);
 	    }
 	  }
+	  printf("here\n");
 	}
-	
-	counter++;
-	int arrpos=ntohl(message->counter);
-	//Store the SEQnr of this PDU
-	logdat[arrpos].seq_no=arrpos;
-	// Store the sending time of the previous PDU
-	if((arrpos-1)>=0){
-	  logdat[arrpos-1].send_start=message->starttime;
-	  logdat[arrpos-1].send_stop=message->stoptime;
-	  logdat[arrpos-1].send_dept_time=message->depttime;
-	}
-	// Store the receive time of this PDU. 
-	logdat[arrpos].recv_start=rstart;
-	logdat[arrpos].recv_stop=rstop;
-	logdat[arrpos].recv_arrival_time=PktArr;
-
-	
-	pducount++;  	    	
-
-	//	printf("%d\t %llu\t %llu\n", message->counter, rstart, rstop);
-	rstart=0;
-	rstop=0;
-	if(counter%10000==0 && counter!=0) {
-	  //	  printf("%s: from %s:UDP:%u  COUNTER= %d \n",argv[0],inet_ntoa(cliAddr.sin_addr),ntohs(cliAddr.sin_port), message->counter);
-	}
-	}
-      }
+	printf("While closed().\n");
     }
   }/* end of server infinite loop */
   

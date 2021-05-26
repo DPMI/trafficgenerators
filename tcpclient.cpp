@@ -43,6 +43,7 @@ int size,noBreak,size1;
 int difference_size,sample_length;
 
 
+
 #define MAX_MSG 65536
 
 int SERVER_PORT=1500;
@@ -58,7 +59,7 @@ int main (int argc, char *argv[]) {
   char *serverName=0;
   u_int32_t exp_id,run_id,key_id;
   exp_id=run_id=key_id=0;
-
+  sample_length=1;
 //  double CPU_before, CPU_after;
   struct timeval PktDept; //GTOD_before, GTOD_after, 
 //  u_int64_t TSC_before,TSC_after;
@@ -140,6 +141,7 @@ int main (int argc, char *argv[]) {
       break;
     case 'l': /*pkt length*/
       size=atoi(optarg);
+      
       break;
      case 'L': /*pkt length maxima*/
       size1=atoi(optarg);
@@ -290,31 +292,30 @@ int main (int argc, char *argv[]) {
     perror("cannot connect ");
     exit(1);
  }
-
+  printf("Connected.\n");
   int flag=1;
   int resultTCP=setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(int));
   if(resultTCP<0){ 
     perror("problem.");
   }
 
-    
   
+  transfer_data sender;
 
+  u_int64_t istart,istop;//,istart0,istop0;/*Var used for send start-stop time*/
 
- 
-    transfer_data sender;
-    char* psender=(char*)&sender;
-    u_int64_t istart,istop;//,istart0,istop0;/*Var used for send start-stop time*/
-
-    string test(1499,'x');
-    strcpy(sender.junk, test.c_str());
-	
+  string test(1483,'x'); 
+  strcpy(sender.junk, test.c_str());
+  
+  
 //----------------
-difference_size = size1 -size;
+  difference_size = size1 -size;
   runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
-   printf("will run %g pkts.\n",runPkts);
-  cout <<" Experiment will run an overall of " << runPkts_1 <<"samples";
-    double di=0;
+  printf(" difference_size = %d  sample_length = %d \n", difference_size, sample_length);
+  printf("will run %g pkts, each %d bytes.\n",runPkts,size);
+  
+  cout << "Experiment will run an overall of " << runPkts_1 <<" samples" << endl;
+  double di=0;
 
     sender.exp_id=htonl(exp_id);
     sender.run_id=htonl(run_id);
@@ -357,7 +358,7 @@ difference_size = size1 -size;
 	close(sd);
 	exit(1);
       }
-      //	printf("%d\t %llu\t %llu\n", sender.counter, istart,istop);
+      printf("%d\t %d bytes, %llu\t %llu\n", ntohl(sender.counter), rc, istart,istop);
       di++;
       if (int (di) %(int)runPkts == 0)
 	{
