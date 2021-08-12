@@ -437,6 +437,7 @@ int main(int argc, char *argv[]) {
 	istart=realcc();
 	if (dflag) {
 	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", di,(int)sender.depttime.tv_sec,sender.depttime.tv_usec);
+	  printf("     PktDept.tv_sec = %d\nPktDept.tv_usec = %06ld\n", PktDept.tv_sec, PktDept.tv_usec); 
 	}
 	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
 	istop=realcc();
@@ -472,6 +473,7 @@ int main(int argc, char *argv[]) {
 	istart=realcc();
 	if (dflag) {
 	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", (int)di, (int)sender.depttime.tv_sec,(int)sender.depttime.tv_usec);
+	  printf("     PktDept.tv_sec = %d\nPktDept.tv_usec = %06ld\n", PktDept.tv_sec, PktDept.tv_usec); 
 	}
 	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
 	istop=realcc();
