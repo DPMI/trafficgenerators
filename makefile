@@ -12,8 +12,8 @@ PREFIX=$(DESTDIR)/usr/local
 DEPDIR=.deps
 
 
-OBJECTa= udpclient.o rnd.o
-OBJECTb= udpserver.o sample.o
+OBJECTa= udpclient.o rnd.o version.o
+OBJECTb= udpserver.o sample.o version.o
 OBJECTb1= udpecho.o
 OBJECTc= tcpclient.o rnd.o
 OBJECTd= tcpserver.o sample.o

@@ -17,9 +17,11 @@
 #define MAX_MSG 1500
 #define MAX_PDU	100000
 
+using namespace std;
+
 #include "udpgen.h"
 #include "sample.h"
-
+#include "version.h" 
 int LOCAL_SERVER_PORT= 1500;
 int SERVER_TIMEOUT=5;
 int SERVER_ECHO=0;
@@ -103,6 +105,7 @@ int main(int argc, char *argv[])
   double samplefreq=0;
   byteCount=pktCount=0;
   int hflag=0;
+  int dflag=0;
   int wildcard=1;
   int loglevel=0;
 
@@ -134,7 +137,7 @@ int main(int argc, char *argv[])
     logdat[i].recv_stop=0;
   }
   dT=0;
-  while ( (op =getopt_long(argc, argv, "t:f:k:e:r:p:hdxL:l:w",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "t:f:k:e:r:p:hdxL:l:wGg",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e': /* experiment_id */
       exp_id=(u_int32_t)atoi(optarg);
@@ -186,6 +189,20 @@ int main(int argc, char *argv[])
       logpath=strdup(optarg);
       break;
 
+ case 'G': /* DEBUG INFO, print close */
+      hflag=1;
+ case 'g': /* DEBUG, continue */
+      dflag=1;
+      cout << "DEBUGGING INFORMATION. " << endl;
+      cout << "git (build time) : " << build_git_time << endl;
+      cout << "git (SHA)        : " << build_git_sha << endl;
+      cout << "sizeof(transfer_data):" << sizeof(transfer_data) << " bytes." << endl;
+      cout << "sizeof(u_int32_t): " << sizeof(u_int32_t) << " bytes. " << endl;
+      cout << "sizeof(u_int64_t): " << sizeof(u_int64_t) << " bytes. " << endl;
+      cout << "sizeof(timeval): " << sizeof(timeval) << " bytes. " << endl;
+      
+      break;
+      
     case 'h': /* Help */
       printf("UDP server. v6\n");
       printf("-d || --daemon                    If enabled; the server will continue to serve new experiments. \n");

@@ -25,7 +25,7 @@
 #include "rnd.h"
 #include "rnddet.h"
 #include "rndunid.h"
-
+#include "version.h"
 
 
 
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 //  int vvv;//added today
 ///   vvv = (sizeof(zzz)/lent);//***today
 //randexpo(zzz,vvv);//***
-  int option_index,op,sd, rc, hflag, REMOTE_SERVER_PORT,reqFlag;
+  int option_index,op,sd, rc, hflag, dflag,REMOTE_SERVER_PORT,reqFlag;
   double waittime,waittime1,sleepTime,sleepTime1;
   //  double linkCapacity;
   struct sockaddr_in cliAddr, remoteServAddr;
@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
   sleepTime=-1;
   size1=1224;
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:m:l:L:v:i:w:W:z:h",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "k:e:r:s:p:n:m:l:L:v:i:w:W:z:hDd",long_options, &option_index))!=EOF) {
     switch (op){
     case 'e':/*exp_id*/
       exp_id=(u_int32_t)atoi(optarg);
@@ -196,7 +196,21 @@ int main(int argc, char *argv[]) {
       sample_length=atoi(optarg);
       cout<<"sample_length is "<<sample_length<<"\n";
       break;   
+
+    case 'D': /* DEBUG INFO, print close */
+      hflag=1;
+    case 'd': /* print, continue. */
+      dflag=1;
+      cout << "DEBUGGING INFORMATION. " << endl;
+      cout << "git (build time) : " << build_git_time << endl;
+      cout << "git (SHA)        : " << build_git_sha << endl;
+      cout << "sizeof(transfer_data):" << sizeof(transfer_data) << " bytes." << endl;
+      cout << "sizeof(u_int32_t): " << sizeof(u_int32_t) << " bytes. " << endl;
+      cout << "sizeof(u_int64_t): " << sizeof(u_int64_t) << " bytes. " << endl;
+      cout << "sizeof(timeval): " << sizeof(timeval) << " bytes. " << endl;
       
+      break;
+	
     case 'h': /*Help*/
       hflag=1;
       
@@ -415,6 +429,9 @@ int main(int argc, char *argv[]) {
 	sender.stoptime=istop;
 	sender.depttime=PktDept;
 	istart=realcc();
+	if (dflag) {
+	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", di,(int)sender.depttime.tv_sec,sender.depttime.tv_usec);
+	}
 	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
 	istop=realcc();
 	gettimeofday(&PktDept,NULL);
@@ -438,13 +455,17 @@ int main(int argc, char *argv[]) {
       
       
     } else {
-      printf("This is a finite run.\n");
+      printf("This is a finite run, dflag=%d.\n", dflag);
+
       while(di<runPkts_1){
 	sender.counter=htonl((int)di);
 	sender.starttime=istart;
 	sender.stoptime=istop;
 	sender.depttime=PktDept;
 	istart=realcc();
+	if (dflag) {
+	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", (int)di, (int)sender.depttime.tv_sec,sender.depttime.tv_usec);
+	}
 	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
 	istop=realcc();
 	gettimeofday(&PktDept,NULL); 
