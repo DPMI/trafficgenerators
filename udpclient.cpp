@@ -210,6 +210,10 @@ int main(int argc, char *argv[]) {
       cout << "sizeof(timeval): " << sizeof(timeval) << " bytes. " << endl;
       cout << "sizeof(timeval.tv_sec) = " << sizeof(timeval::tv_sec) << " bytes. " << endl;
       cout << "sizeof(timeval.tv_usec) = " << sizeof(timeval::tv_usec) << " bytes. " << endl;
+
+      gettimeofday(&PktDept,NULL);
+
+      printf("PktDept.tv_sec = %d\nPktDept.tv_usec = %06ld\n", PktDept.tv_sec, PktDept.tv_usec);
       break;
 	
     case 'h': /*Help*/
