@@ -6,3 +6,4 @@ udpclient
 tcpclient
 icmpclient
 udpecho
+version.c

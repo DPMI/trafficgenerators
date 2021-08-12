@@ -545,7 +545,7 @@ int main(int argc, char *argv[])
 	    logdat[arrpos-1].send_start=message->starttime;
 	    logdat[arrpos-1].send_stop=message->stoptime;
 	    logdat[arrpos-1].send_dept_time.tv_sec=message->depttime.tv_sec;
-	    logdat[arrpos-1].send_dept_time.tv_usec=message->depttime.tv_sec;
+	    logdat[arrpos-1].send_dept_time.tv_usec=message->depttime.tv_usec;
 	  }
 	  // Store the receive time of this PDU. 
 	  logdat[arrpos].recv_start=rstart;
@@ -689,7 +689,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
 
   fprintf(pFile, "Index\tSeqNo\tS.start\tS.stop\tR.start\tR.stop\tDeptTime\tArrTime\n");
   for(n=0;n<sz;n++){
-    fprintf(pFile, "%d\t%d\t%llu\t%llu\t%llu\t%llu\t%ld.%06ld\t%ld.%06ld\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start,rpdu[n].recv_stop,rpdu[n].send_dept_time.tv_sec,rpdu[n].send_dept_time.tv_usec,rpdu[n].recv_arrival_time.tv_sec,rpdu[n].recv_arrival_time.tv_usec);
+    fprintf(pFile, "%d\t%d\t%llu\t%llu\t%llu\t%llu\t%06ld.%06llu\t%06ld.%06llu\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start,rpdu[n].recv_stop,rpdu[n].send_dept_time.tv_sec,rpdu[n].send_dept_time.tv_usec,rpdu[n].recv_arrival_time.tv_sec,rpdu[n].recv_arrival_time.tv_usec);
     //    printf("%d\t %llu\t %llu\t %llu\t %llu\n", rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start, rpdu[n].recv_stop);
     //    rpdu[n].seq_no=0; 
     //rpdu[n].send_start=0;
