@@ -208,7 +208,8 @@ int main(int argc, char *argv[]) {
       cout << "sizeof(u_int32_t): " << sizeof(u_int32_t) << " bytes. " << endl;
       cout << "sizeof(u_int64_t): " << sizeof(u_int64_t) << " bytes. " << endl;
       cout << "sizeof(timeval): " << sizeof(timeval) << " bytes. " << endl;
-      
+      cout << "sizeof(timeval.tv_sec) = " << sizeof(timeval::tv_sec) << " bytes. " << endl;
+      cout << "sizeof(timeval.tv_usec) = " << sizeof(timeval::tv_usec) << " bytes. " << endl;
       break;
 	
     case 'h': /*Help*/
