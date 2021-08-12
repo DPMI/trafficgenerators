@@ -345,7 +345,8 @@ int main (int argc, char *argv[]) {
       sender.counter=htonl((int)di);
       sender.starttime=istart;
       sender.stoptime= istop;
-      sender.depttime=PktDept;
+      sender.depttime.tv_sec=PktDept.tv_sec;
+      sender.depttime.tv_usec=PktDept.tv_usec;
       istart=realcc();
 
       rc =write(sd, &sender,size);

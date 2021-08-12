@@ -427,7 +427,8 @@ int main(int argc, char *argv[]) {
 	sender.counter=htonl((int)di);
 	sender.starttime=istart;
 	sender.stoptime=istop;
-	sender.depttime=PktDept;
+	sender.depttime.tv_sec=PktDept.tv_sec;
+	sender.depttime.tv_usec=PktDept.tv_usec;
 	istart=realcc();
 	if (dflag) {
 	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", di,(int)sender.depttime.tv_sec,sender.depttime.tv_usec);
@@ -461,7 +462,8 @@ int main(int argc, char *argv[]) {
 	sender.counter=htonl((int)di);
 	sender.starttime=istart;
 	sender.stoptime=istop;
-	sender.depttime=PktDept;
+	sender.depttime.tv_sec=PktDept.tv_sec;
+	sender.depttime.tv_usec=PktDept.tv_usec;	
 	istart=realcc();
 	if (dflag) {
 	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", (int)di, (int)sender.depttime.tv_sec,sender.depttime.tv_usec);

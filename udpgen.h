@@ -4,6 +4,10 @@
 /* Patrik.Arlos@bth.se */
 /* */
 
+typedef struct{
+  u_int32_t tv_sec;
+  u_int32_t tv_usec;
+} utimestamp;
 
 typedef struct{
   u_int32_t exp_id;
@@ -12,9 +16,10 @@ typedef struct{
   u_int32_t counter;
   u_int64_t starttime;
   u_int64_t stoptime;
-  timeval depttime;
+  utimestamp depttime;
   u_int64_t recvstarttime;
   u_int64_t recvstoptime;
-  timeval recvtime;
+  utimestamp recvtime;
   char junk[1484];
 }transfer_data;
+

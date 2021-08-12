@@ -439,9 +439,6 @@ int main(int argc, char *argv[])
 	     printf("Sampling disabled.\n");
 	   }
 	 }
-	 
-	 
-
 	cond=1;
       }else {
 	printf("One hit wonder.\n");
@@ -547,12 +544,14 @@ int main(int argc, char *argv[])
 	  if((arrpos-1)>=0){
 	    logdat[arrpos-1].send_start=message->starttime;
 	    logdat[arrpos-1].send_stop=message->stoptime;
-	    logdat[arrpos-1].send_dept_time=message->depttime;
+	    logdat[arrpos-1].send_dept_time.tv_sec=message->depttime.tv_sec;
+	    logdat[arrpos-1].send_dept_time.tv_usec=message->depttime.tv_sec;
 	  }
 	  // Store the receive time of this PDU. 
 	  logdat[arrpos].recv_start=rstart;
 	  logdat[arrpos].recv_stop=rstop;
-	  logdat[arrpos].recv_arrival_time=PktArr;
+	  logdat[arrpos].recv_arrival_time.tv_sec=PktArr.tv_sec;
+	  logdat[arrpos].recv_arrival_time.tv_usec=PktArr.tv_usec;
 	  
 	  
 	  pducount++;  	    	
@@ -560,7 +559,8 @@ int main(int argc, char *argv[])
 	  if (SERVER_ECHO) {
 	    message->recvstarttime=rstart;
 	    message->recvstoptime=rstop;
-	    message->recvtime=PktArr;
+	    message->recvtime.tv_sec=PktArr.tv_sec;
+	    message->recvtime.tv_usec=PktArr.tv_usec;
 
 	    rc=sendto(sd, msg,n, 0,(struct sockaddr *) &cliAddr,sizeof(cliAddr));//size> app head
 	    if (rc<0){

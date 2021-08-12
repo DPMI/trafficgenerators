@@ -362,12 +362,14 @@ servAddr.sin_family = AF_INET;
 	    if((arrpos-1)>=0){
 	      logdat[arrpos-1].send_start=message->starttime;
 	      logdat[arrpos-1].send_stop=message->stoptime;
-	      logdat[arrpos-1].send_dept_time=message->depttime;
+	      logdat[arrpos-1].send_dept_time.tv_sec=message->depttime.tv_sec;
+	      logdat[arrpos-1].send_dept_time.tv_usec=message->depttime.tv_usec;
 	    }
 	    // Store the receive time of this PDU. 
 	    logdat[arrpos].recv_start=rstart;
 	    logdat[arrpos].recv_stop=rstop;
-	    logdat[arrpos].recv_arrival_time=PktArr;
+	    logdat[arrpos].recv_arrival_time.tv_sec=PktArr.tv_sec;
+	    logdat[arrpos].recv_arrival_time.tv_usec=PktArr.tv_usec;
 	    
 	    
 	    pducount++;  	    	
