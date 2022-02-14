@@ -71,6 +71,7 @@ int main(int argc, char *argv[]) {
   int loglevel=1;
   int quiet;
   int runType; /* 0= default, forever, 1= nopkts, 2=time */
+  int SOURCE_PORT=0;
   noBreak=1;
   //linkCapacity=9600;
   waittime1= 1000000;
@@ -96,6 +97,7 @@ int main(int argc, char *argv[]) {
         {"waittimemax", required_argument, 0, 'W'},
 	{"samplelength", required_argument, 0, 'z'},
 	{"help", required_argument, 0, 'h'},
+	{"sourceport",required_argument,0,'a'},
 	{"quiet", no_argument,0,'q'},
 	{0, 0, 0, 0}
         };
@@ -115,8 +117,11 @@ int main(int argc, char *argv[]) {
   sleepTime=-1;
   size1=1224;
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "qk:e:r:s:p:n:m:l:L:v:i:w:W:z:hDd",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "a:b:qk:e:r:s:p:n:m:l:L:v:i:w:W:z:hDd",long_options, &option_index))!=EOF) {
     switch (op){
+    case 'b': /* Set Source port */
+      SOURCE_PORT=atoi(optarg);
+      break;
     case 'e':/*exp_id*/
       exp_id=(u_int32_t)atoi(optarg);
       reqFlag++;
@@ -232,6 +237,7 @@ int main(int argc, char *argv[]) {
       printf(" -k(--keyid) Key id [required]\n");
       printf(" -s (--server) Destination Server [required] \n");
       printf(" -p (--port) <Destination Port> [optional default = 1500] \n");
+      printf(" -q (--sourceport) <Source Port> [optional default = 0, ephemeral \n");
       printf(" -n (--pkts) <Number of packets to send> [optional default = forever]\n");
       printf(" -l (--pktLenmin) <Packet Length> [bytes] [optional default = 1224]\n");
       printf(" -L (--pktLenmax) <Packet Length> [bytes] [optional default = 1224]\n");
@@ -380,7 +386,7 @@ int main(int argc, char *argv[]) {
   /* bind any port */
   cliAddr.sin_family = AF_INET;
   cliAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  cliAddr.sin_port = 0;
+  cliAddr.sin_port = htons(SOURCE_PORT);
 
   rc = bind(sd, (struct sockaddr *) &cliAddr, sizeof(cliAddr));
   if(rc<0) {
