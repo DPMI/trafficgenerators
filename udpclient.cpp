@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
         {"waittimemax", required_argument, 0, 'W'},
 	{"samplelength", required_argument, 0, 'z'},
 	{"help", required_argument, 0, 'h'},
-	{"sourceport",required_argument,0,'a'},
+	{"sourceport",required_argument,0,'b'},
 	{"quiet", no_argument,0,'q'},
 	{0, 0, 0, 0}
         };
@@ -237,7 +237,7 @@ int main(int argc, char *argv[]) {
       printf(" -k(--keyid) Key id [required]\n");
       printf(" -s (--server) Destination Server [required] \n");
       printf(" -p (--port) <Destination Port> [optional default = 1500] \n");
-      printf(" -q (--sourceport) <Source Port> [optional default = 0, ephemeral \n");
+      printf(" -b (--sourceport) <Source Port> [optional default = 0, ephemeral \n");
       printf(" -n (--pkts) <Number of packets to send> [optional default = forever]\n");
       printf(" -l (--pktLenmin) <Packet Length> [bytes] [optional default = 1224]\n");
       printf(" -L (--pktLenmax) <Packet Length> [bytes] [optional default = 1224]\n");
