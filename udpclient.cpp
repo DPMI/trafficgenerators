@@ -99,6 +99,7 @@ int main(int argc, char *argv[]) {
 	{"help", required_argument, 0, 'h'},
 	{"sourceport",required_argument,0,'b'},
 	{"quiet", no_argument,0,'q'},
+	{"version", no_argument,0,'V'},
 	{0, 0, 0, 0}
         };
   REMOTE_SERVER_PORT=1500;
@@ -117,7 +118,7 @@ int main(int argc, char *argv[]) {
   sleepTime=-1;
   size1=1224;
   waittime=0;  
-  while ( (op =getopt_long(argc, argv, "a:b:qk:e:r:s:p:n:m:l:L:v:i:w:W:z:hDd",long_options, &option_index))!=EOF) {
+  while ( (op =getopt_long(argc, argv, "a:b:qk:e:r:s:p:n:m:l:L:v:i:w:W:z:hDdV",long_options, &option_index))!=EOF) {
     switch (op){
     case 'b': /* Set Source port */
       SOURCE_PORT=atoi(optarg);
@@ -137,6 +138,10 @@ int main(int argc, char *argv[]) {
     case 's': /* Server */
       serverName=optarg;
       reqFlag++;
+      break;
+    case 'V': /* Version */
+      printf("Git: %s \n",build_git_sha);
+      printf("Build: %s \n", build_git_time);
       break;
     case 'q': /* Quiet */
       quiet=1;
@@ -232,6 +237,7 @@ int main(int argc, char *argv[]) {
       
       printf("%s\n",argv[0]);
       printf(" -h help (this text)\n");
+      printf(" -V(--version) Version.\n");
       printf(" -e(--expid) Experiment id [required]\n");
       printf(" -r(--runid) Run id [required]\n");
       printf(" -k(--keyid) Key id [required]\n");
