@@ -10,6 +10,9 @@
 #include <sys/time.h> /* select() */
 #include <netinet/tcp.h>
 
+#include <stdint.h>
+#include <inttypes.h>
+
 #include <getopt.h> /* Variable calling of main */
 #include <iostream>
 #include <time.h>
@@ -31,15 +34,36 @@ void killPrg(int sig);
 
 double estimateCPU(int samples, int sleeptime, char* fname);
 
-static inline u_int64_t realcc(void){
-  u_int64_t cc =  __builtin_ia32_rdtsc();
-  return cc;
-}
+
+#if defined(__x86_64__) || defined(__i386__)
+  static inline uint64_t realcc(void) {
+    unsigned int hi, lo;
+    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((uint64_t)hi << 32) | lo;
+  }
+
+#elif defined(__APPLE__)
+  #include <mach/mach_time.h>
+  static inline uint64_t realcc(void) {
+    return mach_absolute_time();
+  }
+
+#elif defined(__aarch64__)
+  static inline uint64_t realcc(void) {
+    uint64_t vct;
+    asm volatile("mrs %0, cntvct_el0" : "=r"(vct));
+    return vct;
+  }
+
+#else
+  #error "Unsupported architecture"
+#endif
+
 
 struct timeval *s;
 struct timeval start,data,stop;
 double runPkts,runPkts_1;
-int size,noBreak,size1;
+int pktsize,noBreak,pktsize1;
 int difference_size,sample_length;
 
 
@@ -103,8 +127,8 @@ int main (int argc, char *argv[]) {
   hflag=0;
   runType=0;
   reqFlag=0;
-  size=1224;
-  size1 = 1224;
+  pktsize=1224;
+  pktsize1 = 1224;
   sleepTime=-1;
   waittime1 = 1000000;
 
@@ -140,12 +164,12 @@ int main (int argc, char *argv[]) {
       cout <<" PSD is"<<psd <<"\n" ;
       break;
     case 'l': /*pkt length*/
-      size=atoi(optarg);
+      pktsize=atoi(optarg);
       
       break;
      case 'L': /*pkt length maxima*/
-      size1=atoi(optarg);
-      cout<< "Max packet Size is "<<size1 <<"\n";
+      pktsize1=atoi(optarg);
+      cout<< "Max packet Size is "<<pktsize1   <<"\n";
       break;
     case 'd': /* download */
       direction=1;
@@ -188,8 +212,8 @@ int main (int argc, char *argv[]) {
       printf(" -m (--pktsize distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
       printf(" -w (--waittime) <Inter frame gap, in usec.> [optional, but if set, voids desired]\n");
       printf(" -v (--wait time distribution) e- exponential u- uniform d- discrete uniform default- deterministic\n\n");
-	  printf(" -d (--down) 	Download, do not upload.\n");
-	  printf(" -z  Enter the sample length (integer)\n");    
+	    printf(" -d (--down) 	Download, do not upload.\n");
+	    printf(" -z  Enter the sample length (integer)\n");    
       printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
       printf(" If neither is defined the software will run forever, or atleast until terminated. \n\n");
       break;
@@ -210,20 +234,20 @@ int main (int argc, char *argv[]) {
   switch(psd){
 	case 'e':
 		printf("Expontial...");
-		myRND1=new RNDEXP(size1);
+		myRND1=new RNDEXP(pktsize1);
 	break;
 	case 'u':
 		printf("Uniform...");
-		myRND1=new RNDUNIF(size,size1);
+		myRND1=new RNDUNIF(pktsize,pktsize1);
 	break;
 
 	case 'd':
-               printf ("uniform discrete");
-                myRND1 = new RNDUNID(size,size1);
-               break;
+    printf ("uniform discrete");
+    myRND1 = new RNDUNID(pktsize,pktsize1);
+    break;
 	default:
 	printf("DEfault is to deterministic ");
-		myRND1=new RNDDET(size1);
+		myRND1=new RNDDET(pktsize1);
 	 	break;
   }
 
@@ -278,7 +302,7 @@ int main (int argc, char *argv[]) {
   
   printf("Connecting to: %s:%d \n", serverName, SERVER_PORT);;
 
-  rc = bind(sd, (struct sockaddr *) &myAddr, sizeof(myAddr));
+  rc = ::bind(sd, (struct sockaddr *) &myAddr, sizeof(myAddr));
   if(rc<0) {
     printf("%s: cannot bind port TCP %u\n",argv[0],SERVER_PORT);
     perror("error ");
@@ -309,10 +333,10 @@ int main (int argc, char *argv[]) {
   
   
 //----------------
-  difference_size = size1 -size;
+  difference_size = pktsize1 -pktsize;
   runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
   printf(" difference_size = %d  sample_length = %d \n", difference_size, sample_length);
-  printf("will run %g pkts, each %d bytes.\n",runPkts,size);
+  printf("will run %g pkts, each %d bytes.\n",runPkts_1,pktsize);
   
   cout << "Experiment will run an overall of " << runPkts_1 <<" samples" << endl;
   double di=0;
@@ -336,7 +360,7 @@ int main (int argc, char *argv[]) {
 
     while(di<runPkts_1){
     // size=int(myRND1->Rnd());
-     //    cout<< size<<"\n";
+     //    cout<< pktsize<<"\n";
     waittime = (int) (myRND2->Rnd());
 //cout<<waittime<<" wait time\n";
 //waittime = waittime*1000;
@@ -349,13 +373,13 @@ int main (int argc, char *argv[]) {
       sender.depttime.tv_usec=PktDept.tv_usec;
       istart=realcc();
 
-      rc =write(sd, &sender,size);
+      rc =write(sd, &sender,pktsize);
       istop=realcc();
       gettimeofday(&PktDept,NULL); 
      // cout<<PktDept.tv_sec<<"."<<PktDept.tv_usec <<"\n";
 
       if(rc<0)          {
-	printf("%s: cannot send data, Packet N#  %d,  size was %d bytes, sender %p \n",argv[0],(int)(di-1), size,&sender );
+	printf("%s: cannot send data, Packet N#  %d,  size was %d bytes, sender %p \n",argv[0],(int)(di-1), pktsize,&sender );
 	close(sd);
 	exit(1);
       }
@@ -363,7 +387,7 @@ int main (int argc, char *argv[]) {
       di++;
       if (int (di) %(int)runPkts == 0)
 	{
-	size = size + sample_length;
+	pktsize = pktsize + sample_length;
 	//sleep(1);
 	}
       if(int(di)%1000==0) {
@@ -429,13 +453,13 @@ void uPause(double noUsec){
      }
      if(loops>=1000000){
        printf("usec loops 100000.\n ");
-       printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
-       printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+       printf("Current %" PRId64 " s target %" PRId64 " s \t ",(int64_t)s.tv_sec,(int64_t)e.tv_sec   );
+       printf("Current %" PRId64 " target us  too %" PRId64 "  us\n",(int64_t)s.tv_usec,(int64_t)e.tv_usec   );
      }
      if(s.tv_sec>e.tv_sec){
        printf("s sec > e sec.\n ");
-       printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
-       printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+       printf("Current %" PRId64 " s target %" PRId64 " s \t ",(int64_t)s.tv_sec,(int64_t)e.tv_sec   );
+       printf("Current %" PRId64 " target us  too %" PRId64 "  us\n",(int64_t)s.tv_usec,(int64_t)e.tv_usec   );
      }
      
      gettimeofday(&s,NULL);

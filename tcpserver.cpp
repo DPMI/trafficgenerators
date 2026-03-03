@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <iostream>
 #include <getopt.h>
+#include <stdint.h>
+#include <inttypes.h>
 #define MAX_MSG 1500
 #define MAX_PDU	100000
 
@@ -60,10 +62,36 @@ int  counter;
 u_int32_t msgcounter;
 
 
-static inline u_int64_t realcc(void){
-  u_int64_t cc =  __builtin_ia32_rdtsc();
-  return cc;
-}
+#if defined(__x86_64__) || defined(__i386__)
+    // x86 or x86_64, Linux or macOS
+    static inline uint64_t realcc(void) {
+    unsigned int hi, lo;
+    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((uint64_t)hi << 32) | lo;
+    }
+
+#elif defined(__APPLE__)
+  /* macOS: use mach_absolute_time() which returns a monotonically
+     increasing counter (requires <mach/mach_time.h>) */
+  #include <mach/mach_time.h>
+
+  static inline uint64_t realcc(void) {
+    return mach_absolute_time();
+  }
+
+#elif defined(__aarch64__)
+    // Linux ARM64
+    static inline uint64_t realcc(void) {
+        uint64_t vct;
+        asm volatile("mrs %0, cntvct_el0" : "=r"(vct));
+        return vct;
+    }
+
+#else
+    #error "Unsupported architecture"
+#endif
+
+
 
 
 double estimateCPU(int samples, int sleeptime, char* fname);
@@ -162,10 +190,12 @@ static struct option long_options[]={
 			exit(EXIT_FAILURE);
 	}
 
-	char fname_cpu[200];
- bzero(&fname_cpu,200);
+    char fname_cpu[200];
+    memset(fname_cpu, 0, sizeof(fname_cpu));
  
- sprintf(fname_cpu,"%d_%d_recvtcp_cpueval.txt",exp_id,run_id);
+
+  snprintf(fname_cpu, sizeof(fname_cpu),
+         "%d_%d_recvtcp_cpueval.txt", exp_id, run_id);
 
   printf("Writes cpu data to %s.\n", fname_cpu);
   
@@ -193,7 +223,7 @@ servAddr.sin_family = AF_INET;
   servAddr.sin_port = htons(LOCAL_SERVER_PORT);
   timeout=0;
   timeout_value=2;
-  rc = bind (sd, (struct sockaddr *) &servAddr,sizeof(servAddr));
+  rc = ::bind (sd, (struct sockaddr *) &servAddr,sizeof(servAddr));
   if(rc<0) {
     printf("%s: cannot bind port number %d \n",argv[0], LOCAL_SERVER_PORT);
     exit(1);
@@ -201,7 +231,7 @@ servAddr.sin_family = AF_INET;
   listen(sd,1024);
 //acceptor = accept(listenfd,(struct sockaddr *)&cliaddr,&clilen);
 
-  printf("%s: waiting for data on port TCP %u\n",argv[0],LOCAL_SERVER_PORT);
+  printf("%s: waiting for data on port TCP %d\n",argv[0],LOCAL_SERVER_PORT);
   
 
   rstart=0;
@@ -225,7 +255,7 @@ servAddr.sin_family = AF_INET;
   printf("File Started at %s\n", file_name);
   printf("Exp id is %d run id is %d \n",exp_id,run_id);
   m=0; /*for pduinfo array*/
-  int cond=1;
+  cond = 1;
   struct timeval accept_timeout;
   fd_set rset;
  
@@ -283,7 +313,7 @@ servAddr.sin_family = AF_INET;
       printf("Accepted Connection.\n");
 
       //
-	while( n = recvfrom(acceptor, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen) ) {
+	while( (n = recvfrom(acceptor, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen) ) > 0 )  {
 	  printf ("Read %d bytes from recvfrom\n", n);
 	  rstop=realcc();
 	  gettimeofday(&PktArr,NULL);
@@ -297,8 +327,8 @@ servAddr.sin_family = AF_INET;
 	      printf("[%d]: Got small packet, %d bytes.\n", (int)pktCount,(int)byteCount);
 	    } else {
 	      /* print received message */
-	      message=(transfer_data*)msg;
-	      cout<< sizeof (message) <<"\n";
+              message=(transfer_data*)msg;
+              cout<< sizeof(transfer_data) <<"\n";
 	      byteCount+=n;
 	      pktCount++;
 	      iii++;
@@ -324,7 +354,7 @@ servAddr.sin_family = AF_INET;
 		printf("Missmatch of exp/run/key_id %u:%u:%u expected %u:%u:%u .\n", ntohl(message->exp_id),ntohl(message->run_id),ntohl(message->key_id), exp_id,run_id,key_id);
 	      }
 	      
-	      if( (counter==-1) ){
+	      if( counter==-1 ){
 		
 		if(dT!=0){
 		  gettimeofday(&theTime, NULL);
@@ -374,7 +404,7 @@ servAddr.sin_family = AF_INET;
 	    
 	    pducount++;  	    	
 	    
-	    printf("%d\t %llu\t %llu\n", ntohl(message->counter), rstart, rstop);
+      printf("%d\t %llu\t %llu\n", ntohl(message->counter), (unsigned long long)rstart, (unsigned long long)rstop);
 	    rstart=0;
 	    rstop=0;
 	    if(counter%10000==0 && counter!=0) {
@@ -391,8 +421,8 @@ servAddr.sin_family = AF_INET;
   TSC_after=realcc();
   CPU_after=estimateCPU(40,100000,fname_cpu);
 
-  printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
-  printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
+  printf("Start:%d.%06ld - %" PRIu64 "\n", (int)GTOD_before.tv_sec, (long)GTOD_before.tv_usec, TSC_before);
+  printf("Stop:%d.%06ld - %" PRIu64 "\n", (int)GTOD_after.tv_sec, (long)GTOD_after.tv_usec, TSC_after);
   printf("CPU before: %f \n", CPU_before);
   printf("CPU after: %f \n", CPU_after);
   
@@ -421,8 +451,9 @@ close_con(int sig)
 
 
 void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq){
-  printf(">output_file(%d,%d, %p, %d)\n",eid, rid, &rpdu, sz);
-  int n,rc=0;
+  printf(">output_file(%d,%d, %p, %d)\n",eid, rid, (void*)rpdu, sz);
+  int n,rc;
+  n=rc=0;
   u_int64_t iptr=0,ipts=0, ipgr=0,ipgs=0;
   //  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
   //double var_iptr=0,var_ipts=0,var_ipgr=0,var_ipgs=0;
@@ -432,14 +463,14 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   }
 
   char fname[200];
-  bzero(&fname,200);
+  memset(fname, 0, sizeof(fname));
   /*
   strcat(fname, eid);
   strcat(fname, "/");
   strcat(fname, filename);
   strcat(fname, "_server.txt");
   */
-  sprintf(fname,"%d_%d_server.txt",eid,rid);
+  snprintf(fname, sizeof(fname), "%d_%d_server.txt",eid,rid);
   
 
   FILE *pFile;
@@ -496,7 +527,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
 
   fprintf(pFile, "Index\tSeqNo\tS.start\tS.stop\tR.start\tR.stop\tDeptTime\tArrTime\n");
   for(n=0;n<sz;n++){
-    fprintf(pFile, "%d\t%d\t%llu\t%llu\t%llu\t%llu\t%ld.%06ld\t%ld.%06ld\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start,rpdu[n].recv_stop,rpdu[n].send_dept_time.tv_sec,rpdu[n].send_dept_time.tv_usec,rpdu[n].recv_arrival_time.tv_sec,rpdu[n].recv_arrival_time.tv_usec);
+    fprintf(pFile, "%d\t%d\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%ld.%06ld\t%ld.%06ld\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start, rpdu[n].recv_stop, (long)rpdu[n].send_dept_time.tv_sec, (long)rpdu[n].send_dept_time.tv_usec, (long)rpdu[n].recv_arrival_time.tv_sec, (long)rpdu[n].recv_arrival_time.tv_usec);
      
   } 
   fclose(pFile);
@@ -554,7 +585,7 @@ double estimateCPU(int samples, int sleeptime, char *filename){
       freq=0;
       freq_avg=0;
     }
-    fprintf(pFile, "%s.%06ld\t%llu\t%f\n",tms, st[n].tv_usec,cputime[n],freq);
+    fprintf(pFile, "%s.%06ld\t%" PRIu64 "\t%f\n",tms, (long)st[n].tv_usec, cputime[n],freq);
   }
   fprintf(pFile,"Average CPU = %f\n", (freq_avg)/(double)(samples));
   fprintf(pFile,"***\n");
@@ -566,7 +597,7 @@ double estimateCPU(int samples, int sleeptime, char *filename){
 
 void Sample(int sig){
 	gettimeofday(&theTime, NULL);
-	printf("%ld.%06ld:%g:%g:%g:%g\n",theTime.tv_sec,theTime.tv_usec,8*byteCount,pktCount,(8*byteCount)/dT,pktCount/dT);
+	printf("%ld.%06ld:%g:%g:%g:%g\n", (long)theTime.tv_sec, (long)theTime.tv_usec, 8*byteCount, pktCount, (8*byteCount)/dT, pktCount/dT);
 	byteCount=0;
 	pktCount=0;
   return;

@@ -1,6 +1,33 @@
 # Time-stamp: <02/11/09 10:40:24 INGA>
 # File: Makefile
 
+ifeq ($(OS),Windows_NT)
+	uname_S := Windows
+	WinBuild = 1
+	BFLAGS= -DWinBuild
+else
+	uname_S := $(shell uname -s)
+	ifeq ($(uname_S),Darwin)
+		uname_S := DARWIN
+		MacBuild = 1
+		LDFLAGS="-L/opt/homebrew/opt/openssl/lib"
+		CPPFLAGS="-I/opt/homebrew/opt/openssl/include"
+		BFLAGS= -DMacBuild
+	else 
+		WinBuild = 0
+		BFLAGS= 	
+	endif
+endif
+
+
+$(info $$uname_S is [${uname_S}])
+$(info $$LDFLAGS is [${LDFLAGS}])
+$(info $$CPPFLAGS is [${CPPFLAGS}])
+$(info $$BFLAGS is [${BFLAGS}])
+
+
+
+
 COMPILE=g++
 CC=gcc
 LINK=g++
@@ -57,16 +84,16 @@ install:
 
 
 server.o: server.cpp
-	$(COMPILE) $(CARG) server.cpp
+	$(COMPILE) $(CARG) $(BFLAGS) server.cpp
 
 udpserver.o: udpserver.cpp
-	$(COMPILE) $(CARG) udpserver.cpp
+	$(COMPILE) $(CARG)  $(BFLAGS) udpserver.cpp
 
 udpecho.o: udpecho.c
-	$(CC) $(CARG) udpecho.c
+	$(CC) $(CARG)  $(BFLAGS) udpecho.c
 
 udpclient.o: udpclient.cpp
-	$(COMPILE) $(CARG) udpclient.cpp
+	$(COMPILE) $(CARG) $(BFLAGS)  udpclient.cpp
 
 sample.o: sample.cpp sample.h
 	$(COMPILE) $(CARG) sample.cpp

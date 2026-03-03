@@ -19,6 +19,7 @@
 #include <math.h>
 #include <cstring>/// cggggggggg
 #include "udpgen.h"
+#include <inttypes.h>
 #define lent 8 // sizeof double
 #include "rndexp.h"
 #include "rndunif.h"
@@ -29,7 +30,7 @@
 
 
 
-using namespace std;
+//using namespace std;
 
 void uPause(double noUsec);
 void closePrg(int sig);
@@ -38,16 +39,38 @@ void randexpo(double a[], int xxx);
 
 double estimateCPU(int samples, int sleeptime, char* fname);
 
-static inline u_int64_t realcc(void){
- u_int64_t cc =  __builtin_ia32_rdtsc();
- return cc;
+
+#if defined(__x86_64__) || defined(__i386__)
+static inline uint64_t realcc(void) {
+  unsigned int hi, lo;
+  asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+  return ((uint64_t)hi << 32) | lo;
 }
+#elif defined(__APPLE__)
+#include <mach/mach_time.h>
+static inline uint64_t realcc(void) {
+  return mach_absolute_time();
+}
+#elif defined(__aarch64__)
+static inline uint64_t realcc(void) {
+  uint64_t vct;
+  asm volatile("mrs %0, cntvct_el0" : "=r"(vct));
+  return vct;
+}
+#else
+#error "Unsupported architecture"
+#endif
+
+
+
+
+
 //provide sample length no. of packets 32 x x x x x .. 32+ sample length..... 
 struct timeval *s;
-struct timeval start,data,stop;
+struct timeval start,tvdata,stop;
 double runPkts,runPkts_1;
-int size,noBreak,size1;
-int difference_size,sample_length;
+int pktsiez,noBreak,pktsiez1;
+int difference_pktsiez,sample_length;
 
 int main(int argc, char *argv[]) {
 //  double zzz[10000];// added today
@@ -66,6 +89,7 @@ int main(int argc, char *argv[]) {
   sample_length = -1; 
   runPkts_1 = 0;
   double CPU_before, CPU_after;
+  CPU_before=CPU_after=0;
   struct timeval GTOD_before, GTOD_after, PktDept;
   u_int64_t TSC_before,TSC_after;
   int loglevel=1;
@@ -89,7 +113,7 @@ int main(int argc, char *argv[]) {
 	{"pkts", required_argument,0,'n'},
 	{"pktdist", required_argument,0,'m'},	
 	{"pktLenmin", required_argument, 0, 'l'},
-        {"pktLenMax", required_argument, 0, 'L'},
+  {"pktLenMax", required_argument, 0, 'L'},
 	{"pktLen",required_argument,0,'a'},
 	{"waitdist", required_argument, 0, 'v'},
 	{"waittime", required_argument, 0, 'i'},
@@ -114,9 +138,9 @@ int main(int argc, char *argv[]) {
   quiet=0;
   runType=0;
   reqFlag=0;
-  size=1224;
+  pktsiez=1224;
   sleepTime=-1;
-  size1=1224;
+  pktsiez1=1224;
   waittime=0;  
   while ( (op =getopt_long(argc, argv, "a:b:qk:e:r:s:p:n:m:l:L:v:i:w:W:z:hDdV",long_options, &option_index))!=EOF) {
     switch (op){
@@ -149,44 +173,44 @@ int main(int argc, char *argv[]) {
     case 'p': /* Port number */
       REMOTE_SERVER_PORT=atoi(optarg);
       break;
-    case 'n': /* number of pkts per samplesize*/
+    case 'n': /* number of pkts per samplepktsiez*/
       runPkts=atof(optarg);
       runType=1;
       break;
       break;
-    case 'm': /*pkt size distribution*/
+    case 'm': /*pkt pktsiez distribution*/
       psd=*optarg;
-      /*      cout <<" Packet Size Distribution: ";
+      /*      cout <<" Packet Pktsiez Distribution: ";
       switch (psd){
       case'e':
-	cout << "Exponential.";
+	std::cout << "Exponential.";
 	break;
       case'u':
-	cout << "Uniform.";
+	std::cout << "Uniform.";
 	break;
       case'd':
-	cout << "Uniform Discrete.";
+	std::cout << "Uniform Discrete.";
 	break;
       default:
-	cout << "Discrete.";
+	std::cout << "Discrete.";
 	break;
       }
-      cout << "(" << psd <<")\n" ;
+      std::cout << "(" << psd <<")\n" ;
       */
       break;
     case 'l': /*pkt length min*/
-      size=atoi(optarg);
-      cout<< "Min packet Size is "<<size <<"\n";
+      pktsiez=atoi(optarg);
+      std::cout<< "Min packet Pktsiez is "<<pktsiez <<"\n";
       break;
     case 'L': /*pkt length maximal*/
-      size1=atoi(optarg);
-      cout<< "Max packet Size is "<<size1 <<"\n";
+      pktsiez1=atoi(optarg);
+      std::cout<< "Max packet Pktsiez is "<<pktsiez1 <<"\n";
       break;
       
     case 'a' : /* packet length */
-      size=atoi(optarg);
-      size1=atoi(optarg);
-      cout << "Packet size is " << size  << "\n";
+      pktsiez=atoi(optarg);
+      pktsiez1=atoi(optarg);
+      std::cout << "Packet pktsiez is " << pktsiez  << "\n";
       break;
     case 'v': /* distribution*/
       wtd=*optarg;
@@ -204,32 +228,32 @@ int main(int argc, char *argv[]) {
       break;
    case 'W': /*wait time maxima*/
       sleepTime1=atoi(optarg);
-      cout<<"sleeptime Max is "<<sleepTime<<"\n";
+      std::cout<<"sleeptime Max is "<<sleepTime<<"\n";
       waittime1=sleepTime1;
       reqFlag=4;
       break;   
     case 'z': /*sample_length*/
       sample_length=atoi(optarg);
-      cout<<"sample_length is "<<sample_length<<"\n";
+      std::cout<<"sample_length is "<<sample_length<<"\n";
       break;   
 
     case 'D': /* DEBUG INFO, print close */
       hflag=1;
     case 'd': /* print, continue. */
       dflag=1;
-      cout << "DEBUGGING INFORMATION. " << endl;
-      cout << "git (build time) : " << build_git_time << endl;
-      cout << "git (SHA)        : " << build_git_sha << endl;
-      cout << "sizeof(transfer_data):" << sizeof(transfer_data) << " bytes." << endl;
-      cout << "sizeof(u_int32_t): " << sizeof(u_int32_t) << " bytes. " << endl;
-      cout << "sizeof(u_int64_t): " << sizeof(u_int64_t) << " bytes. " << endl;
-      cout << "sizeof(timeval): " << sizeof(timeval) << " bytes. " << endl;
-      cout << "sizeof(timeval.tv_sec) = " << sizeof(timeval::tv_sec) << " bytes. " << endl;
-      cout << "sizeof(timeval.tv_usec) = " << sizeof(timeval::tv_usec) << " bytes. " << endl;
+      std::cout << "DEBUGGING INFORMATION. " << endl;
+      std::cout << "git (build time) : " << build_git_time << endl;
+      std::cout << "git (SHA)        : " << build_git_sha << endl;
+      std::cout << "sizeof(transfer_data):" << sizeof(transfer_data) << " bytes." << endl;
+      std::cout << "sizeof(u_int32_t): " << sizeof(u_int32_t) << " bytes. " << endl;
+      std::cout << "sizeof(u_int64_t): " << sizeof(u_int64_t) << " bytes. " << endl;
+      std::cout << "sizeof(timeval): " << sizeof(timeval) << " bytes. " << endl;
+      std::cout << "sizeof(timeval.tv_sec) = " << sizeof(timeval::tv_sec) << " bytes. " << endl;
+      std::cout << "sizeof(timeval.tv_usec) = " << sizeof(timeval::tv_usec) << " bytes. " << endl;
 
       gettimeofday(&PktDept,NULL);
 
-      printf("PktDept.tv_sec = %d\nPktDept.tv_usec = %06ld\n", PktDept.tv_sec, PktDept.tv_usec);
+      printf("PktDept.tv_sec = %ld\nPktDept.tv_usec = %06d\n", PktDept.tv_sec, PktDept.tv_usec);
       break;
 	
     case 'h': /*Help*/
@@ -256,7 +280,7 @@ int main(int argc, char *argv[]) {
       printf(" -v (--waitdist) e- exponential u- uniform d- discrete uniform default- deterministic\n");
       printf(" \n");
       printf(" -z  Enter the sample length (integer) (optional) ");
-      printf("        If used then it will be the number of samples per packet size in the distribution.)\n");      
+      printf("        If used then it will be the number of samples per packet pktsiez in the distribution.)\n");      
       printf(" The -t and -n options are exclusive, if both are defined unknown behaviour might occur.\n");
       printf(" If neither is defined the software will run forever, or atleast until terminated. \n\n");
       break;
@@ -280,40 +304,40 @@ int main(int argc, char *argv[]) {
   }
 
 
-  RND* myRND1;// packet size distribution
+  RND* myRND1;// packet pktsiez distribution
   RND* myRND2; // wait time distribution
   if (quiet==0){
-    printf("Packet size distribution: ");
+    printf("Packet pktsiez distribution: ");
   }
   switch(psd){
   case 'e':
     if (quiet==0){
-      printf("Expontial, rndexp(%d).\n",size1);
+      printf("Expontial, rndexp(%d).\n",pktsiez1);
     }
-    myRND1=new RNDEXP(size1);
-    //	RNDEXP myRND1(size1);
+    myRND1=new RNDEXP(pktsiez1);
+    //	RNDEXP myRND1(pktsiez1);
     break;
   case 'u':
     if (quiet==0){
-    printf("Uniform, rndunif(%d,%d)\n",size,size1);
+    printf("Uniform, rndunif(%d,%d)\n",pktsiez,pktsiez1);
     }
-    myRND1=new RNDUNIF(size,size1);
-    //RNDUNIF myRND1(size,size1);		
+    myRND1=new RNDUNIF(pktsiez,pktsiez1);
+    //RNDUNIF myRND1(pktsiez,pktsiez1);		
     break;
     
   case 'd':
     if (quiet==0){
-      printf ("Uniform Discrete, rndunid(%d,%d).\n",size,size1);
+      printf ("Uniform Discrete, rndunid(%d,%d).\n",pktsiez,pktsiez1);
     }
-    myRND1 = new RNDUNID(size,size1);
-    //RNDUNID myRND1(size,size1);
+    myRND1 = new RNDUNID(pktsiez,pktsiez1);
+    //RNDUNID myRND1(pktsiez,pktsiez1);
     break;
   default:
     if (quiet==0){
-      printf("Default is to deterministic, rnddet(%d).\n",size1);
+      printf("Default is to deterministic, rnddet(%d).\n",pktsiez1);
     }
-    myRND1=new RNDDET(size1);
-    //RNDDET myRND1(size1);
+    myRND1=new RNDDET(pktsiez1);
+    //RNDDET myRND1(pktsiez1);
     break;
   }
 
@@ -351,21 +375,21 @@ int main(int argc, char *argv[]) {
   double pps= (1e6/(double)(waittime1));
   if (quiet==0){
     printf("Seeds:\n");
-    printf("\tPktsize: ");
+    printf("\tPktpktsiez: ");
     (*myRND1).printseed();
     printf("\tWaittime: ");
     (*myRND2).printseed();
   }
   
   char fname_cpu[200];
-  bzero(&fname_cpu,200);
+  memset(fname_cpu, 0, sizeof(fname_cpu));
   /*
   strcat(fname_cpu, exp_id);
   strcat(fname_cpu, "/");
   strcat(fname_cpu, run_id);
   strcat(fname_cpu, "_send_cpueval.txt");
   */
-  sprintf(fname_cpu,"%d_%d_send_cpueval.txt", exp_id,run_id);
+  snprintf(fname_cpu,sizeof(fname_cpu), "%d_%d_send_cpueval.txt", exp_id,run_id);
   if(loglevel>1){
     printf("Writes cpu data to %s.\n", fname_cpu);
     //CPU_before=estimateCPU(40,100000,fname_cpu);
@@ -394,8 +418,7 @@ int main(int argc, char *argv[]) {
   cliAddr.sin_addr.s_addr = htonl(INADDR_ANY);
   cliAddr.sin_port = htons(SOURCE_PORT);
 
-  rc = bind(sd, (struct sockaddr *) &cliAddr, sizeof(cliAddr));
-  if(rc<0) {
+  if ( ::bind(sd, (struct sockaddr *) &cliAddr, (socklen_t)sizeof(cliAddr)) != 0 ) {
     printf("%s: cannot bind port\n", argv[0]);
     exit(1);
   }
@@ -422,24 +445,24 @@ int main(int argc, char *argv[]) {
   //istop0=0;
   
   /* send data */
-  s=&data;
+  s=&tvdata;
   gettimeofday(s,NULL);
   
-  //    cout<<s->tv_sec<<","<<s->tv_usec<<endl;
+  //    std::cout<<s->tv_sec<<","<<s->tv_usec<<endl;
   start=*s;
 
   // ((L-l)*num of samples )/sample_length
   //sample_length = 2;
   if (sample_length > 0){
     if (quiet==0){
-      printf("Adapting number of packets, as to reach the desired sample size.\n"); 
-      printf("Size1 %d, size = %d \n", size1,size);
+      printf("Adapting number of packets, as to reach the desired sample pktsiez.\n"); 
+      printf("Pktsiez1 %d, pktsiez = %d \n", pktsiez1,pktsiez);
     }
-    difference_size = size1 -size;
+    difference_pktsiez = pktsiez1 -pktsiez;
     if (quiet==0){
-      printf("difference_size = %d , runPkts = %g , sample_length = %d , runPkts = %g \n", difference_size,runPkts,sample_length, runPkts_1);
+      printf("difference_pktsiez = %d , runPkts = %g , sample_length = %d , runPkts = %g \n", difference_pktsiez,runPkts,sample_length, runPkts_1);
     }
-    runPkts_1 = floor (((difference_size)*runPkts)/sample_length) + runPkts;
+    runPkts_1 = floor (((difference_pktsiez)*runPkts)/sample_length) + runPkts;
   } else {
     if (quiet==0){
       printf("Fixed no pkts. \n");
@@ -452,10 +475,10 @@ int main(int argc, char *argv[]) {
   */
 
   if(runType==1) {
-    printf("Will run %g pkts for each size.\n",runPkts);
+    printf("Will run %g pkts for each pktsiez.\n",runPkts);
     printf("Experiment will run an overall of %g samples.\n",runPkts_1);
     if (sample_length>0){
-	printf("(%d *%d) / %g ==> %g \n",difference_size, runPkts, sample_length, floor (((difference_size)*runPkts)/sample_length));
+	printf("(%d *%f) / %d ==> %g \n",difference_pktsiez, runPkts, sample_length, floor (((difference_pktsiez)*runPkts)/sample_length));
     }
     double di=0;
     printf("Should take %g seconds .\n", (double)(runPkts_1)/pps);
@@ -475,7 +498,7 @@ int main(int argc, char *argv[]) {
 
     if(runPkts_1==-1) {
       printf("Will run forever....\n");
-      printf("Sending %d bytes.\n", size1);
+      printf("Sending %d bytes.\n", pktsiez1);
       while(true){
 	sender.counter=htonl((int)di);
 	sender.starttime=istart;
@@ -483,15 +506,15 @@ int main(int argc, char *argv[]) {
 	sender.depttime.tv_sec=PktDept.tv_sec;
 	sender.depttime.tv_usec=PktDept.tv_usec;
 	istart=realcc();
-	if (quiet==1 || dflag) {
-	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %llu \n", di,(int)sender.depttime.tv_sec,sender.depttime.tv_usec);
-	  printf("             PktDept.tv_sec = %06ld PktDept.tv_usec = %06ld\n", PktDept.tv_sec, PktDept.tv_usec); 
-	}
-	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
+    if (quiet==1 || dflag) {
+    printf("[%d] sender.depttime.tv_sec = %06d sender.depttime.tv_usec = %06d \n", (int)di,(int)sender.depttime.tv_sec,(int)sender.depttime.tv_usec);
+    printf("             PktDept.tv_sec = %06ld PktDept.tv_usec = %06ld\n", (long)PktDept.tv_sec, (long)PktDept.tv_usec);
+  }
+	rc =sendto(sd, &sender,pktsiez1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//pktsiez> app head
 	istop=realcc();
 	gettimeofday(&PktDept,NULL);
 	if(rc<0)          {
-	  printf("%s: cannot send data %d, error was %d and size was %d \n",argv[0],(int)(di-1),rc,size1);
+	  printf("%s: cannot send data %d, error was %d and pktsiez was %d \n",argv[0],(int)(di-1),rc,pktsiez1);
 	  close(sd);
 	  exit(1);
 	}
@@ -501,10 +524,10 @@ int main(int argc, char *argv[]) {
 	di++;
 
 	if(int(di)%1000==0) {
-	  cout << di << " pkts." <<endl;
+	  std::cout << di << " pkts." <<endl;
 	}
 	waittime=myRND2->Rnd();
-	//       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
+	//       std::cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
 	uPause(waittime);
       }      
       
@@ -519,11 +542,11 @@ int main(int argc, char *argv[]) {
 	sender.depttime.tv_sec=PktDept.tv_sec;
 	sender.depttime.tv_usec=PktDept.tv_usec;	
 	istart=realcc();
-	if (quiet==0 || dflag) {
-	  printf("[%d] sender.depttime.tv_sec = %06ld sender.depttime.tv_usec = %06ld \n", (int)di, (int)sender.depttime.tv_sec,(int)sender.depttime.tv_usec);
-	  printf("             PktDept.tv_sec = %06ld PktDept.tv_usec = %06ld\n", PktDept.tv_sec, PktDept.tv_usec); 
-	}
-	rc =sendto(sd, &sender,size1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//size> app head
+    if (quiet==0 || dflag) {
+    printf("[%d] sender.depttime.tv_sec = %06d sender.depttime.tv_usec = %06d \n", (int)di, (int)sender.depttime.tv_sec,(int)sender.depttime.tv_usec);
+    printf("             PktDept.tv_sec = %06ld PktDept.tv_usec = %06ld\n", (long)PktDept.tv_sec, (long)PktDept.tv_usec);
+  }
+	rc =sendto(sd, &sender,pktsiez1, 0,(struct sockaddr *) &remoteServAddr,sizeof(remoteServAddr));//pktsiez> app head
 	istop=realcc();
 	gettimeofday(&PktDept,NULL); 
 	if(rc<0)          {
@@ -537,15 +560,15 @@ int main(int argc, char *argv[]) {
 	di++;
 	if (int (di) %(int)runPkts == 0)
 	  {
-	    size1 = size1 - sample_length;
+	    pktsiez1 = pktsiez1 - sample_length;
 	    
 	  }
 	
 	if(int(di)%1000==0) {
-	  cout << PktDept.tv_sec << " " << di << "/" << runPkts_1 << " pkts." <<endl;
+	  std::cout << PktDept.tv_sec << " " << di << "/" << runPkts_1 << " pkts." <<endl;
 	}
 	waittime=myRND2->Rnd();
-	//       cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
+	//       std::cout<< waittime<<"wait time\n" << "packet num is "<< di<<"\n";
 	uPause(waittime);
       }
 
@@ -561,8 +584,8 @@ if(loglevel>1){
   TSC_after=realcc();
   //  CPU_after=estimateCPU(40,100000,fname_cpu);
   
-  printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
-  printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
+  printf("Start:%d.%06d - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
+  printf("Stop:%d.%06d - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
   printf("CPU before: %f \n", CPU_before);
   printf("CPU after: %f \n", CPU_after);
  }
@@ -624,7 +647,7 @@ void uPause(double noUsec){
      if(s.tv_sec>e.tv_sec){
        printf("s sec > e sec.\n ");
        printf("Current %d s target %d s \t ",(int)s.tv_sec,(int)e.tv_sec   );
-       printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+       printf("Current %06d target us  too %06d  us\n",s.tv_usec,e.tv_usec   );
      }
      
      gettimeofday(&s,NULL);
@@ -639,8 +662,8 @@ void closePrg(int sig){
 
 void killPrg(int sig){
   noBreak=0;
-  cout << "KILLED!!! " << endl;
-  cout<<"Sent a total of " << runPkts << " pkts."<<endl;
+  std::cout << "KILLED!!! " << endl;
+  std::cout << "Sent a total of " << runPkts << " pkts."<<endl;
   exit(EXIT_SUCCESS);
 }
 
@@ -651,7 +674,7 @@ double estimateCPU(int samples, int sleeptime, char *filename){
   float freq;
   double freq_avg=0;
   unsigned long microseconds,seconds;
-  struct timeval data;
+  struct timeval tvdata;
   struct timeval st[100];
   u_int64_t cputime[100];
 
@@ -670,9 +693,9 @@ printf("--------\n");
   
 
   for(int i=0;i<samples;i++){
-    gettimeofday(&data,NULL);
+    gettimeofday(&tvdata,NULL);
     cputime[i]=realcc();
-    st[i]=data;
+    st[i]=tvdata;
     usleep(sleeptime);
 
   }
@@ -697,7 +720,7 @@ printf("--------\n");
       freq=0;
       freq_avg=0;
     }
-    fprintf(pFile, "%s.%06ld\t %llu\t\t%f \n",tms, st[n].tv_usec,cputime[n],freq);
+    fprintf(pFile, "%s.%06d\t %llu\t\t%f \n",tms, st[n].tv_usec,cputime[n],freq);
   }
   fprintf(pFile,"Average CPU = %f\n", (freq_avg)/(double)(samples));
   fprintf(pFile,"***\n");

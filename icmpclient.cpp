@@ -18,6 +18,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <iostream>
 #include <math.h>
 #include <getopt.h>
@@ -43,22 +44,23 @@ u_char *packet, outpack[MAXPACKET];
 int ping(int sss,u_int32_t exp, u_int32_t run, u_int32_t key, string target,u_int32_t count ,int size_packet)
 {
 
-  int  i, cc, packlen, datalen = size_packet;// DEFDATALEN;
+//  int packlen;
+  int  i, cc, datalen = size_packet;// DEFDATALEN;
   struct hostent *hp;
-  struct sockaddr_in to, from;
+  struct sockaddr_in to;//, from;
   //struct protoent	*proto;
-  struct ip *ip;
+//  struct ip *ip;
   //u_char *packet, outpack[MAXPACKET];
   char hnamebuf[MAXHOSTNAMELEN];
   string hostname;
   struct icmp *icp;
-  int ret, fromlen, hlen;
-  fd_set rfds;
-  struct timeval tv;
-  int retval;
-  struct timeval start, end;
-  int /*start_t, */end_t;
-  bool cont = true;
+//  int ret, fromlen, hlen;
+//  fd_set rfds;
+//  struct timeval tv;
+//  int retval;
+  struct timeval start;//, end;
+//  int /*start_t, */end_t;
+//  bool cont = true;
   
   to.sin_family = AF_INET;
   
@@ -80,7 +82,7 @@ int ping(int sss,u_int32_t exp, u_int32_t run, u_int32_t key, string target,u_in
       strncpy(hnamebuf, hp->h_name, sizeof(hnamebuf) - 1);
       hostname = hnamebuf;
     }
-  packlen = datalen + MAXIPLEN + MAXICMPLEN; //56 +60 + 76 = 192
+//  packlen = datalen + MAXIPLEN + MAXICMPLEN; //56 +60 + 76 = 192
   
   
   icp = (struct icmp *)outpack;
@@ -266,13 +268,13 @@ void uPause(double noUsec){
   }
   if(loops>=1000000){
     printf("usec loops 100000.\n ");
-    printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
-    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+    printf("Current %06ld s target %06ld s \t ",(long)s.tv_sec,(long)e.tv_sec   );
+    printf("Current %06ld target us  too %06ld  us\n",(long)s.tv_usec,(long)e.tv_usec   );
   }
   if(s.tv_sec>e.tv_sec){
     printf("s sec > e sec.\n ");
-    printf("Current %06ld s target %06ld s \t ",s.tv_sec,e.tv_sec   );
-    printf("Current %06ld target us  too %06ld  us\n",s.tv_usec,e.tv_usec   );
+    printf("Current %06ld s target %06ld s \t ",(long)s.tv_sec,(long)e.tv_sec   );
+    printf("Current %06ld target us  too %06ld  us\n",(long)s.tv_usec,(long)e.tv_usec   );
   }
 
   gettimeofday(&s,NULL);
@@ -286,16 +288,19 @@ char *serverName=0;
   u_int32_t exp_id,run_id,key_id;
   exp_id=run_id=key_id=0;
 
- int option_index,op,sd, rc, hflag,reqFlag;
-  double waittime,waittime1,linkCapacity,sleepTime,sleepTime1;
+ int option_index,op, hflag,reqFlag;
+// int rc,sd;
+//  double linkCapacity;
+  double waittime,waittime1,sleepTime,sleepTime1;
 struct hostent *h;
  char psd, wtd;  
   psd='d';
   wtd='d';
-int runType;
+//int runType;
 
 double runPkts, runPkts_1;
-int size,noBreak,size1;
+//int noBreak;
+int size,size1;
 int difference_size,sample_length;
 	
 
@@ -332,7 +337,7 @@ int difference_size,sample_length;
 
 
   hflag=0;
-  runType=0;
+//  runType=0;
   reqFlag=0;
   size=1224;
   sleepTime=-1;
@@ -363,7 +368,7 @@ int difference_size,sample_length;
     case 'n': /* number of pkts */
       runPkts=atof(optarg);
       cout <<runPkts <<"\n";
-      runType=1;
+      //runType=1;
       break;
       break;
     case 'm': /*pkt size distribution*/
@@ -484,8 +489,10 @@ int difference_size,sample_length;
 (*myRND2).printseed();
 
  
-        double di; // Di is num of run times..
+double di; // Di is num of run times..
 u_int32_t counter1;
+di=0;
+counter1=0;
 int si;
 if ( (si = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 	{

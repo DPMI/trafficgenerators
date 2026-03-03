@@ -15,6 +15,8 @@
 #include <iostream>
 #include <getopt.h>
 #include <assert.h>
+#include <stdint.h>
+#include <inttypes.h>
 #define MAX_MSG 1500
 #define MAX_PDU	100000
 
@@ -140,26 +142,50 @@ timeval tid1,tid2,tidf,tid3,tidOff;
 int  counter;
 u_int32_t msgcounter;
 
-static inline u_int64_t realcc(void){
-  u_int64_t cc =  __builtin_ia32_rdtsc();
-  return cc;
+#if defined(__x86_64__) || defined(__i386__)
+static inline uint64_t realcc(void) {
+  unsigned int hi, lo;
+  asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+  return ((uint64_t)hi << 32) | lo;
 }
+#elif defined(__APPLE__)
+#include <mach/mach_time.h>
+static inline uint64_t realcc(void) {
+  return mach_absolute_time();
+}
+#elif defined(__aarch64__)
+static inline uint64_t realcc(void) {
+  uint64_t vct;
+  asm volatile("mrs %0, cntvct_el0" : "=r"(vct));
+  return vct;
+}
+#else
+#error "Unsupported architecture"
+#endif
 
 double estimateCPU(int samples, int sleeptime, char* fname);
 double samplefreq;
 int runAsDaemon;
-char *logpath;
+char logpath[PATH_MAX];
 
 u_int64_t sumipts=0,sumipgs=0,sumiptr=0,sumipgr=0;  /*to keep the previous pkt recv cpu counter*/
 int pcounter,m,js=0,jr=0; /*previou pkt sequence number*/
 int cond;
+
+
+void init_logpath() {
+    // Default value
+    snprintf(logpath, sizeof(logpath), ".");
+}
+
 int main(int argc, char *argv[])
 {
   int option_index, op,reqFlag=0;
   u_int32_t exp_id,run_id,key_id;
   exp_id=run_id=key_id=0;
   runAsDaemon=0;
-  logpath=".";
+
+  init_logpath();
 
   double CPU_before, CPU_after;
   struct timeval GTOD_before, GTOD_after, PktArr;
@@ -262,7 +288,7 @@ int main(int argc, char *argv[])
       break;
       
     case 'l': /* Log Path */
-      logpath=strdup(optarg);
+      snprintf(logpath, sizeof(logpath), "%s", optarg);
       break;
 
     case 'h': /* Help */
@@ -297,7 +323,7 @@ int main(int argc, char *argv[])
   char fname_cpu[200];
   char fpath[200];
   int mkdir_status;
-  bzero(&fname_cpu,200);
+  memset(fname_cpu, 0, sizeof(fname_cpu));
   /*
   strcat(fname_cpu, exp_id);
   strcat(fname_cpu, "/");
@@ -319,8 +345,8 @@ int main(int argc, char *argv[])
 
   printf("[level= %d] \n",loglevel);
   
-  sprintf(fname_cpu,"%s/%d/recv_cpueval-%d-%d-%d.txt",logpath,exp_id,exp_id,run_id,key_id);
-  sprintf(fpath,"%s/%d",logpath,exp_id);
+  snprintf(fname_cpu, sizeof(fname_cpu), "%s/%d/recv_cpueval-%d-%d-%d.txt",logpath,exp_id,exp_id,run_id,key_id);
+  snprintf(fpath, sizeof(fpath), "%s/%d",logpath,exp_id);
 
   if(wildcard==0 && loglevel>1){ // This is the ONLY case when its applicable, we know the exp,run and key id.
     printf("Writes cpu data to %s.\n", fname_cpu);
@@ -337,6 +363,7 @@ int main(int argc, char *argv[])
   printf("Sampling interval %f s.\n",dT);
   u_int64_t rstart,rstop;/*rstart mean reciving start time*/
   int sd, rc, n, cliLen;
+  sd=rc=n=cliLen=0;
   socklen_t cliLenT;
   struct sockaddr_in cliAddr, servAddr;
   char msg[MAX_MSG];
@@ -471,7 +498,7 @@ int main(int argc, char *argv[])
       accept_timeout.tv_usec=0;
       if(loglevel>0 && pktCount>0){
 	printf("Writing to file\n");
-	sprintf(fpath,"%s/%d",logpath,exp_id);
+	snprintf(fpath, sizeof(fpath), "%s/%d",logpath,exp_id);
 	mkdir_status=mkdir(fpath,S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	printf("Result of mkdir %d, for mkdir(%s).\n",mkdir_status,fpath);
 	output_file(exp_id,run_id, logdat,pducount, CPU_before);
@@ -533,16 +560,25 @@ int main(int argc, char *argv[])
       
 
       switch(servertype){
-      case UDPd:
-	n = recvfrom(sd, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
-	break;
-      case TCPd:
-	printf("tcpRecv.\n");
+        case UDPd:
+          n = recvfrom(sd, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLen);
+          break;
+        case TCPd:
+          printf("tcpRecv.\n");
+          n = recvfrom(tcpSD, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLenT);
+          printf("got %d bytes \n",n);
+        break;
+        case ICMPd:
+          n=0;
+          printf("NOT implemented.\n");
+          break;
+        case NONE:
+          n=0;
+          printf("You need to specify a server.\n");
+          break;
 
-	n = recvfrom(tcpSD, msg, MAX_MSG, 0,(struct sockaddr *) &cliAddr,(socklen_t*) &cliLenT);
-	printf("got %d bytes \n",n);
-	break;
-      }
+
+  }
 
       rstop=realcc();
       gettimeofday(&PktArr,NULL);
@@ -582,7 +618,7 @@ int main(int argc, char *argv[])
 	    
 	  }
 	  
-	  if( (counter==-1) ){
+	  if( counter==-1 ){
 	    if(dT!=0){
 	      gettimeofday(&theTime, NULL);
 	      printf("Initializing the sampling every %g second.\n",dT);
@@ -650,8 +686,8 @@ int main(int argc, char *argv[])
     TSC_after=realcc();
     CPU_after=estimateCPU(40,100000,fname_cpu);
     
-    printf("Start:%d.%06ld - %llu\n", (int)GTOD_before.tv_sec, GTOD_before.tv_usec, TSC_before);
-    printf("Stop:%d.%06ld - %llu\n", (int)GTOD_after.tv_sec, GTOD_after.tv_usec, TSC_after);
+    printf("Start:%d.%06ld - %" PRIu64 "\n", (int)GTOD_before.tv_sec, (long)GTOD_before.tv_usec, TSC_before);
+    printf("Stop:%d.%06ld - %" PRIu64 "\n", (int)GTOD_after.tv_sec, (long)GTOD_after.tv_usec, TSC_after);
     printf("CPU before: %f \n", CPU_before);
     printf("CPU after: %f \n", CPU_after);
   }
@@ -679,7 +715,8 @@ void close_con(int sig){
 
 void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq){
   printf(">output_file(%d,%d, %p, %d)\n",eid, rid, &rpdu, sz);
-  int n,rc=0;
+  int n,rc;
+  n=rc=0;
   u_int64_t iptr=0,ipts=0, ipgr=0,ipgs=0;
   //  double av_iptr=0,av_ipts=0,av_ipgr=0,av_ipgs=0;
   //double var_iptr=0,var_ipts=0,var_ipgr=0,var_ipgs=0;
@@ -689,14 +726,14 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
   }
 
   char fname[200];
-  bzero(&fname,200);
+  memset(fname, 0, sizeof(fname));
   /*
   strcat(fname, eid);
   strcat(fname, "/");
   strcat(fname, filename);
   strcat(fname, "_server.txt");
   */
-  sprintf(fname,"%d/udpserver-%d-%d.txt",eid,eid,rid);
+  snprintf(fname, sizeof(fname), "%d/udpserver-%d-%d.txt",eid,eid,rid);
   
 
   FILE *pFile;
@@ -753,7 +790,7 @@ void output_file(u_int32_t eid,u_int32_t rid, pdudata rpdu[],int sz, double freq
 
   fprintf(pFile, "Index\tSeqNo\tS.start\tS.stop\tR.start\tR.stop\tDeptTime\tArrTime\n");
   for(n=0;n<sz;n++){
-    fprintf(pFile, "%d\t%d\t%llu\t%llu\t%llu\t%llu\t%ld.%06ld\t%ld.%06ld\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start,rpdu[n].recv_stop,rpdu[n].send_dept_time.tv_sec,rpdu[n].send_dept_time.tv_usec,rpdu[n].recv_arrival_time.tv_sec,rpdu[n].recv_arrival_time.tv_usec);
+    fprintf(pFile, "%d\t%d\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%ld.%06ld\t%ld.%06ld\n", n, rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start,rpdu[n].recv_stop,(long)rpdu[n].send_dept_time.tv_sec,(long)rpdu[n].send_dept_time.tv_usec,(long)rpdu[n].recv_arrival_time.tv_sec,(long)rpdu[n].recv_arrival_time.tv_usec);
     //    printf("%d\t %llu\t %llu\t %llu\t %llu\n", rpdu[n].seq_no, rpdu[n].send_start, rpdu[n].send_stop, rpdu[n].recv_start, rpdu[n].recv_stop);
     //    rpdu[n].seq_no=0; 
     //rpdu[n].send_start=0;
@@ -818,7 +855,7 @@ double estimateCPU(int samples, int sleeptime, char *filename){
       freq_avg=0;
     }
     if(pFile!=NULL){
-      fprintf(pFile, "%s.%06ld\t%llu\t%f\n",tms, st[n].tv_usec,cputime[n],freq);
+      fprintf(pFile, "%s.%06ld\t%" PRIu64 "\t%f\n",tms, (long)st[n].tv_usec,cputime[n],freq);
     }
   }
   if(pFile!=NULL){
@@ -832,7 +869,7 @@ double estimateCPU(int samples, int sleeptime, char *filename){
 
 void Sample(int sig){
 	gettimeofday(&theTime, NULL);
-	printf("%ld.%06ld:%g:%g:%g:%g\n",theTime.tv_sec,theTime.tv_usec,8*byteCount,pktCount,(8*byteCount)/dT,pktCount/dT);
+		printf("%ld.%06ld:%g:%g:%g:%g\n", (long)theTime.tv_sec, (long)theTime.tv_usec, 8*byteCount, pktCount, (8*byteCount)/dT, pktCount/dT);
 	byteCount=0;
 	pktCount=0;
   return;
